@@ -199,8 +199,8 @@ namespace PaxBot.Modules
                 ("ping", 
                 "If the bot is working, he should reply \"Pong!\".");
             embed.AddField
-                ("show [PID]",
-                "Prints info about province with given PID.");
+                ("Show",
+                "Prints info about specified object.");
             embed.AddField
                 ("echo [text]",
                 "If the bot is working, he should reply \"[text]\".");

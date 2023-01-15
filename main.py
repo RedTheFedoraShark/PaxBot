@@ -28,7 +28,7 @@ async def on_ready():
                 except:
                     print("An error occurred. Cog likely in place or missing.")
 
-    print("\nCommands loaded!")
+    print("--------\nCommands loaded!")
 
     print("{} ready to roll!".format(bot.user))
     # print("{}".format(config['database']['user']))

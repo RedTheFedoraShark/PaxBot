@@ -13,9 +13,7 @@ class Debug(commands.Cog):
         with open(path.join(parentPath, "config/config.json")) as f:
             self.owner = int(json.load(f)['Owner'])
 
-    @commands.command()
-    async def ping(self, ctx):
-        await ctx.message.reply("Pong!")
+
     """
     @commands.command()
     async def reconnect(self, ctx):

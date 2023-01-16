@@ -1,9 +1,12 @@
-import discord, json, sys
+import discord, json
 from discord.ext import commands
 from cogs import *
+from prototype import *
+from config.colorful import Colorful, timestamp
 with open("./config/config.json") as f:
     config = json.load(f)
-
+with open("./config/token.json") as f:
+    token = json.load(f)
 
 """Declare intents for bot"""
 intents = discord.Intents.default()
@@ -16,31 +19,25 @@ bot = commands.Bot(command_prefix=config['Prefix'], intents=intents)
 
 @bot.event
 async def on_ready():
-    #await bot.add_cog(debug.Debug(bot))
-    print("Loading commands...")
-    for module in sys.modules.values():
-        if module.__name__.startswith('cogs.'):
-            print('--------\nmodule:', module.__name__)
-            for cls in map(module.__dict__.get, module.__all__):
-                print('adding cog:', cls.__name__)
-                try:
-                    await bot.add_cog(cls(bot))
-                except:
-                    print("An error occurred. Cog likely in place or missing.")
+    await defdump.load_cogs(bot)
+    print(timestamp() +
+          Colorful.CVIOLET + str(bot.user) + ": " + Colorful.CBLUE + Colorful.CITALIC + "Ready to roll!" + Colorful.CEND)
 
-    print("--------\nCommands loaded!")
-
-    print("{} ready to roll!".format(bot.user))
-    # print("{}".format(config['database']['user']))
-    print("Connected to guilds:")
+    print(timestamp() + Colorful.CBLUE + "Connected to guilds:" + Colorful.CEND)
     for guild in bot.guilds:
-        print(guild.id)
+        print(timestamp() + Colorful.CVIOLET + str(guild.id) + "\t" + Colorful.CBLUE + guild.name + Colorful.CEND)
 
 
 @bot.event
-async def on_command_error():
-    print("")
+async def on_command(ctx):
+    print(timestamp() +
+          Colorful.CVIOLET + str(ctx.author) +
+          " ["+ str(ctx.author.id) +"] " +
+          Colorful.CBLUE + " called " +
+          Colorful.CVIOLET + str(ctx.command) +
+          Colorful.CEND)
 
-bot.run(config['Token'])
+
+bot.run(token['Token'])
 
 print("I am dead")

@@ -2,3 +2,6 @@
 *.pyc
 cogs/__pycache__/__init__.cpython-310.pyc
 cogs/__pycache__/debug.cpython-310.pyc
+config/token.json
+
+

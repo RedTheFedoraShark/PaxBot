@@ -32,7 +32,7 @@ async def on_ready():
 async def on_command(ctx):
     print(timestamp() +
           Colorful.CVIOLET + str(ctx.author) +
-          " ["+ str(ctx.author.id) +"] " +
+          "[" + str(ctx.author.id) + "] " +
           Colorful.CBLUE + " called " +
           Colorful.CVIOLET + str(ctx.command) +
           Colorful.CEND)
@@ -40,4 +40,4 @@ async def on_command(ctx):
 
 bot.run(token['Token'])
 
-print("I am dead")
+print(timestamp() + Colorful.CBLUE + "I am dead")

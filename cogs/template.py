@@ -9,6 +9,6 @@ class Template(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command()
+    @commands.command(aliases=['check'])
     async def ping(self, ctx):
         await ctx.message.reply("Pong!")

@@ -13,7 +13,7 @@ class Debug(commands.Cog):
 
     @commands.command()
     async def kill(self, ctx):
-        if ctx.author.id == await self.bot.is_owner(ctx.author):
+        if await self.bot.is_owner(ctx.author):
             print(timestamp() +
                   Colorful.CBLUE + "Good night.")
             await ctx.send("Good night.")

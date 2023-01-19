@@ -1,37 +1,36 @@
-from discord.ext import commands
+import interactions
 from prototype import defdump
 from config.colorful import Colorful, timestamp
 # from os import path
 # import json
 
-__all__ = ['Debug']
+
+def setup(bot):
+    Debug(bot)
 
 
-class Debug(commands.Cog):
+class Debug(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command()
+    @interactions.extension_command(
+        name="kill",
+        description="Turn off the bot"
+    )
     async def kill(self, ctx):
-        if await self.bot.is_owner(ctx.author):
+        if self.bot.me.owner.id == ctx.author.id:
             print(timestamp() +
                   Colorful.CBLUE + "Good night.")
             await ctx.send("Good night.")
             # db.close()
-            await self.bot.close()
+            await self.bot._stop()
         else:
-            await ctx.message.reply("You have no power here!")
+            await ctx.send("You have no power here!")
             print(timestamp() +
                   Colorful.CRED + "Unauthorized access attempt from " +
                   Colorful.CVIOLET + str(ctx.author.id) +
                   Colorful.CEND)
             return
-        return
-
-    @commands.command()
-    async def reload(self, ctx):
-        await defdump.unload_cogs(self.bot)
-        await defdump.load_cogs(self.bot)
         return
 
 

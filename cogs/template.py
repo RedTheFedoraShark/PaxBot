@@ -1,7 +1,9 @@
-from discord.ext import commands
 import interactions
-# all class names from this file have to be included in __all__ array
-__all__ = ['Template']
+
+
+# all class names from this file have to be included in def below
+def setup(bot):
+    Template(bot)
 
 
 class Template(interactions.Extension):
@@ -9,6 +11,8 @@ class Template(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(aliases=['check'])
+    @interactions.extension_command(
+        name="ping"
+    )
     async def ping(self, ctx):
-        await ctx.message.reply("Pong!")
+        await ctx.send("Pong!")

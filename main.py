@@ -1,4 +1,6 @@
 import json
+import logging
+
 import interactions
 from cogs import *
 from prototype import *
@@ -15,14 +17,13 @@ intents.message_content = True
 
 """Declare bot and add all cogs"""
 # bot = commands.Bot(command_prefix=config['Prefix'], intents=intents)
-bot = interactions.Client(token=token['Token'], intents=intents, logging=True)
+bot = interactions.Client(token=token['Token'], intents=intents, logging=logging.INFO)
+defdump.load_extensions(bot)
 
 @bot.event
 async def on_ready():
-    await defdump.load_extensions(bot)
-    # await defdump.print
     print(timestamp() +
-          Colorful.CVIOLET + str(bot.me) + ": " + Colorful.CBLUE + Colorful.CITALIC + "Ready to roll!" + Colorful.CEND)
+          Colorful.CVIOLET + str(bot.me.name) + ": " + Colorful.CBLUE + Colorful.CITALIC + "Ready to roll!" + Colorful.CEND)
 
     print(timestamp() + Colorful.CBLUE + "Connected to guilds:" + Colorful.CEND)
     for guild in bot.guilds:
@@ -34,11 +35,13 @@ async def on_command(ctx):
     print(timestamp() +
           Colorful.CVIOLET + str(ctx.author) +
           "[" + str(ctx.author.id) + "] " +
-          Colorful.CBLUE + " called " +
-          Colorful.CVIOLET + str(ctx.command) +
+          Colorful.CBLUE + "called " +
+          Colorful.CVIOLET + str(ctx.data.name) +
           Colorful.CEND)
+
+
 
 
 bot.start()
 
-print(timestamp() + Colorful.CBLUE + "I am dead")
+print(timestamp() + Colorful.CBLUE + "I am dead.")

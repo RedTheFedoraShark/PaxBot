@@ -10,6 +10,8 @@ with open("./config/config.json") as f:
 with open("./config/token.json") as f:
     token = json.load(f)
 
+from database import *
+
 """Declare intents for bot"""
 intents = interactions.Intents.DEFAULT
 intents.messages = True

@@ -22,6 +22,7 @@ intents.message_content = True
 bot = interactions.Client(token=token['Token'], intents=intents, logging=logging.INFO)
 defdump.load_extensions(bot)
 
+
 @bot.event
 async def on_ready():
     print(timestamp() +

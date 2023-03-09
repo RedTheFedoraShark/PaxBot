@@ -4,77 +4,103 @@ from database import *
 
 # all class names from this file have to be included in def below
 def setup(bot):
-    Template(bot)
+    Army(bot)
 
 
-class Template(interactions.Extension):
+class Army(interactions.Extension):
     # constructor
     def __init__(self, bot):
         self.bot = bot
 
     @interactions.extension_command(
         name="army",
-        description="manage armies",
+        description="manage armies"
+        # options=[
+        #     interactions.Option(
+        #         name="list",
+        #         description="List armies (army) and details",
+        #         type=interactions.OptionType(1)
+        #     ),
+        #
+        #     interactions.Option(
+        #         name="merge",
+        #         description="Merge a few armies together",
+        #         type=interactions.OptionType(1)
+        #     ),
+        #
+        #     interactions.Option(
+        #         name="split",
+        #         description="Merge a few armies together",
+        #         type=interactions.OptionType(1)
+        #     ),
+        #
+        #     interactions.Option(
+        #         name="move",
+        #         description="Merge a few armies together",
+        #         type=interactions.OptionType(1)
+        #     )
+        # ]
+    )
+    async def army(self, ctx: interactions.CommandContext):
+        return
+
+    @army.subcommand(
+        name="list",
+        description="aa",
         options=[
-            interactions.Option(
-                name="list",
-                description="List armies (army) and details",
-                type=interactions.OptionType.SUB_COMMAND
+            interactions.option(
+                name='mode',
+                description='What would you like to list?',
+                type=interactions.OptionType.STRING,
+                required=True
             ),
-
             interactions.Option(
-                name="merge",
-                description="Merge a few armies together",
-                type=interactions.OptionType.SUB_COMMAND
-            ),
-
-            interactions.Option(
-                name="split",
-                description="Merge a few armies together",
-                type=interactions.OptionType.SUB_COMMAND
-            ),
-
-            interactions.Option(
-                name="move",
-                description="Merge a few armies together",
-                type=interactions.OptionType.SUB_COMMAND
+                name='province',
+                description='wow do you really need it?',
+                type=interactions.OptionType.STRING,
+                required=False
             )
         ]
     )
-    async def army(self, ctx: interactions.CommandContext, sub_command: str):
+    async def list2(self, ctx: interactions.CommandContext, mode: str, province=None):
         connection = db.pax_engine.connect()
-        country = connection.execute(
-            text(f'SELECT country_id FROM players WHERE player_id = {ctx.author.id}')).fetchall()[0][0]
-
-        match sub_command:
-            case 'list':
-                if ctx.author.has_permissions(8):
-                    result = connection.execute(text('SELECT * FROM armies WHERE 1'))
-                    pass
-                else:
-                    result = connection.execute(text('SELECT * FROM armies WHERE country_id = country;'))
-                await ctx.send(f'{result.fetchall()}')
-            case 'merge':
+        match mode:
+            case 'owned':
                 pass
-            case 'split':
+            case 'province':
                 pass
-            case 'move':
-                pass
+            case _:
+                await ctx.send('Mode selected does not exist!')
         connection.close()
+        return
 
     @army.subcommand(
-        name="list2",
-        description="",
-        options=None
+        name='dump',
+        description='!ADMIN ONLY! Dump all the armies into chat',
+        options=[
+            interactions.Option(
+                name='province',
+                description='wow do you really need it?',
+                type=interactions.OptionType.INTEGER,
+                required=False
+            )
+        ]
     )
-    async def list2(self, ctx: interactions.CommandContext):
+    async def dump(self, ctx: interactions.CommandContext, province=None):
         connection = db.pax_engine.connect()
-        country = connection.execute(
-            text(f'SELECT country_id FROM players WHERE player_id = {ctx.author.id}')).fetchall()[0][0]
+        if not await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            await ctx.send('You have insufficient permissions to run this command')
+            connection.close()
+            return
 
-        if ctx.author.has_permissions(8):
-            result = connection.execute(text('SELECT * FROM armies WHERE 1'))
-            pass
+        if province is not None:
+            query = 'SELECT * FROM armies WHERE province_id = province;'
         else:
-            result = connection.execute(text('SELECT * FROM armies WHERE country_id = country;'))
-        await ctx.send(f'{result.fetchall()}')
+            query = 'SELECT * FROM armies WHERE 1;'
+
+        result = connection.execute(text(query)).fetchall()
+        await ctx.send(f'{result}')
+        connection.close()
+        return
+
+

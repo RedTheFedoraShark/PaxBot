@@ -20,6 +20,7 @@ intents.message_content = True
 bot = interactions.Client(token=token['Token'], intents=intents, logging=logging.INFO)
 defdump.load_extensions(bot)
 
+
 @bot.event
 async def on_ready():
     print(timestamp() +
@@ -33,13 +34,11 @@ async def on_ready():
 @bot.event
 async def on_command(ctx):
     print(timestamp() +
-          Colorful.CVIOLET + str(ctx.author) +
+          Colorful.CVIOLET + str(ctx.author.name) +
           "[" + str(ctx.author.id) + "] " +
           Colorful.CBLUE + "called " +
           Colorful.CVIOLET + str(ctx.data.name) +
           Colorful.CEND)
-
-
 
 
 bot.start()

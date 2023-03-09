@@ -34,9 +34,9 @@ async def on_ready():
 
 
 @bot.event
-async def on_command(ctx):
+async def on_command(ctx: interactions.CommandContext):
     print(timestamp() +
-          Colorful.CVIOLET + str(ctx.author) +
+          Colorful.CVIOLET + str(ctx.author.name) +
           "[" + str(ctx.author.id) + "] " +
           Colorful.CBLUE + "called " +
           Colorful.CVIOLET + str(ctx.data.name) +

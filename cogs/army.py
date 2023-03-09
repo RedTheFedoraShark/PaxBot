@@ -48,7 +48,7 @@ class Army(interactions.Extension):
         name="list",
         description="aa",
         options=[
-            interactions.option(
+            interactions.Option(
                 name='mode',
                 description='What would you like to list?',
                 type=interactions.OptionType.STRING,
@@ -62,7 +62,7 @@ class Army(interactions.Extension):
             )
         ]
     )
-    async def list2(self, ctx: interactions.CommandContext, mode: str, province=None):
+    async def list(self, ctx: interactions.CommandContext, mode: str, province=None):
         connection = db.pax_engine.connect()
         match mode:
             case 'owned':

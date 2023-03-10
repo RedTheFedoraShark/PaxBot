@@ -10,6 +10,8 @@ with open("./config/config.json") as f:
 with open("./config/token.json") as f:
     token = json.load(f)
 
+from database import *
+
 """Declare intents for bot"""
 intents = interactions.Intents.DEFAULT
 intents.messages = True
@@ -32,7 +34,7 @@ async def on_ready():
 
 
 @bot.event
-async def on_command(ctx):
+async def on_command(ctx: interactions.CommandContext):
     print(timestamp() +
           Colorful.CVIOLET + str(ctx.author.name) +
           "[" + str(ctx.author.id) + "] " +

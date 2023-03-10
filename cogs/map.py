@@ -19,7 +19,7 @@ class Map(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @interactions.extension_command(description='Zapytaj kartografa o mapy.', scope='917078941213261914')
+    @interactions.extension_command(description='Zapytaj kartografa o mapy.') #, scope='1015648339070558380'
     @interactions.option(name='mapa', description='Jaka mapa?',
                          choices=[interactions.Choice(name="Prowincji", value="provinces"),
                                   interactions.Choice(name="Regionów", value="regions"),

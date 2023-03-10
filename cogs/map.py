@@ -1,8 +1,9 @@
 import interactions
+import json
+import math
 from wand.image import Image
 from wand.drawing import Drawing
 from wand.color import Color
-import json
 from sqlalchemy import create_engine, text
 
 with open("./config/token.json") as f:
@@ -27,7 +28,8 @@ class Map(interactions.Extension):
                                   interactions.Choice(name="Polityczna", value="countries"),
                                   interactions.Choice(name="Religii", value="religions"),
                                   interactions.Choice(name="Populacji", value="pops"),
-                                  interactions.Choice(name="Autonomii", value="autonomy")]
+                                  interactions.Choice(name="Autonomii", value="autonomy"),
+                                  interactions.Choice(name="Pusta", value="empty")]
                          )
     @interactions.option(name='kontury', description='Dodać kontury prowincji?',
                          choices=[interactions.Choice(name="Nie", value="no"),
@@ -40,7 +42,11 @@ class Map(interactions.Extension):
                                   interactions.Choice(name="Nazwy Regionów", value="region_name"),
                                   interactions.Choice(name="Nazwy Państw", value="country_name")]
                          )
-    async def mapa(self, ctx: interactions.CommandContext, map_type: str, borders: str, information: str):
+    @interactions.option(name='legenda', description='Jaką legendę chcesz?',
+                         choices=[interactions.Choice(name="Żadna", value="none"),
+                                  interactions.Choice(name="dummy", value="dummy")]
+                         )
+    async def mapa(self, ctx: interactions.CommandContext, map_type: str, borders: str, information: str, legend: str):
         # Creating the SQLAlchemy for later.
         engine = create_engine(f"mysql+pymysql://{t['Muser']}:{t['Mpassword']}@{t['Mip']}/{t['Mdb']}?charset=utf8mb4",
                                pool_size=50, max_overflow=20)
@@ -95,28 +101,87 @@ class Map(interactions.Extension):
                 final_image = Image(filename="maps/regions.png")
                 fi = final_image.clone()
                 title = "Mapa Autonomii"
+            case "empty":
+                final_image = Image(width=1628, height=1628, background=Color('transparent'))
+                fi = final_image.clone()
+                title = "Mapa Pusta"
 
         match borders:
             case "no":
                 pass
             case "yes":
-                title = f"{title} (kontury)"
                 first_layer = Image(filename="maps/borders.png")
                 fl = first_layer.clone()
                 with Drawing() as draw:
                     draw.composite(operator="atop", left=0, top=0, width=fl.width, height=fl.height, image=fl)
                     draw(fi)
+                title = f"{title} (kontury)"
 
         match information:
             case "none":
-                pass
+                title = f"{title}."
             case "province_id":
-                dummy = "dummy"
+                first_layer = Image(filename="maps/province_id.png")
+                fl = first_layer.clone()
+                with Drawing() as draw:
+                    draw.composite(operator="atop", left=0, top=0, width=fl.width, height=fl.height, image=fl)
+                    draw(fi)
+                title = f"{title}, z ID prowincji."
             case "province_name":
-                dummy = "dummy"
+                fi.resize(3256, 3256)
+                table = engine.connect().execute(text(
+                    "SELECT province_name, pixel_capital_x, pixel_capital_y FROM provinces"))
+                final_table = table.fetchall()
+                with Drawing() as draw:
+                    draw.font = 'Times New Roman'
+                    draw.font_size = 20
+                    draw.stroke_color = Color('black')
+                    draw.stroke_width = 2
+                    draw.text_alignment = 'center'
+                    for row in final_table:
+                        province_text = row[0].replace(' ', '\n')
+                        draw.text(row[1]*2, row[2]*2, f"{province_text}")
+                    draw(fi)
+                with Drawing() as draw:
+                    draw.font = 'Times New Roman'
+                    draw.font_size = 20
+                    draw.fill_color = Color('white')
+                    draw.text_alignment = 'center'
+                    for row in final_table:
+                        draw.text(row[1]*2, row[2]*2, f"{province_text}")
+                    draw(fi)
+                title = f"{title}, z nazwami prowincji."
             case "region_name":
-                dummy = "dummy"
+                result = engine.connect().execute(text(
+                    f"SELECT region_name, region_x, region_y FROM regions"))
+                final_table = result.fetchall()
+                with Drawing() as draw:
+                    draw.font = 'Times New Roman'
+                    draw.font_size = 40
+                    draw.stroke_color = Color('black')
+                    draw.stroke_width = 8
+                    draw.text_alignment = 'center'
+                    for row in final_table:
+                        region_text = row[0].replace(' ', '\n')
+                        draw.text(row[1], row[2], f"{region_text}")
+                    draw(fi)
+                with Drawing() as draw:
+                    draw.font = 'Times New Roman'
+                    draw.font_size = 40
+                    draw.fill_color = Color('white')
+                    draw.text_alignment = 'center'
+                    for row in final_table:
+                        region_text = row[0].replace(' ', '\n')
+                        draw.text(row[1], row[2], f"{region_text}")
+                    draw(fi)
+                title = f"{title}, z nazwami regionów."
             case "country_name":
+                title = f"{title}, z nazwami państw."
+
+        match legend:
+            case "none":
+                pass
+            case "dummy":
                 dummy = "dummy"
 
         fi.save(filename="maps/final_image.png")

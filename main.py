@@ -43,8 +43,6 @@ async def on_command(ctx: interactions.CommandContext):
           Colorful.CEND)
 
 
-
-
 bot.start()
 
 print(timestamp() + Colorful.CBLUE + "I am dead.")

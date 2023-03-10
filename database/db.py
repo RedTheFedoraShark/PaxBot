@@ -1,4 +1,6 @@
 import json
+import sys
+
 import sqlalchemy
 from sqlalchemy import create_engine
 from sqlalchemy_utils import database_exists
@@ -44,8 +46,19 @@ def check_databases():
         print("Main database present.")
 
 
-def backup(action):
-    pass
+def backup():
+    match sys.platform:
+        case 'linux':
+            try:
+                os.system(f"mysqldump -h {dbconfig['DB_HOST']} -u {dbconfig['DB_USER']} -p{dbconfig['DB_PASSWD']} > '.\\backups\\$(date +\"F_%H-%M-%S\").sql'")
+            except:
+                return False
+        case 'win32':
+            try:
+                os.system(f"mysqldump -h {dbconfig['DB_HOST']} -u {dbconfig['DB_USER']} -p{dbconfig['DB_PASSWD']} pax > .\\database\\backups\\pierdolę_windowsa.sql")
+            except:
+                return False
+    return True
 
 
 pax_engine = start(SQL_PAX_URL)

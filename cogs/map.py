@@ -1,6 +1,7 @@
 import interactions
 import json
 import math
+import numpy as np
 from wand.image import Image
 from wand.drawing import Drawing
 from wand.color import Color
@@ -63,7 +64,7 @@ class Map(interactions.Extension):
                 fi = final_image.clone()
                 title = "Mapa Regionów"
             case "terrains":
-                final_image = Image(filename="maps/regions.png")
+                final_image = Image(filename="maps/terrains.png")
                 fi = final_image.clone()
                 title = "Mapa Terenów"
             case "goods":
@@ -77,11 +78,13 @@ class Map(interactions.Extension):
                 result = engine.connect().execute(text(
                                                 "SELECT pixel_capital_x, pixel_capital_y, country_id FROM provinces"))
                 table = result.fetchall()
+                result = engine.connect().execute(text(
+                                                "SELECT country_color, country_id FROM countries"))
+                table2 = result.fetchall()
+                table2 = np.array(table2)
                 for row in table:
-                    result = engine.connect().execute(text(
-                                                f"SELECT country_color FROM countries WHERE country_id = '{row[2]}'"))
-                    entry = result.fetchall()
-                    final = row[0], row[1], entry[0][0]
+                    index = np.where(table2 == np.str_(row[2]))
+                    final = row[0], row[1], table2[index[0][0]][0]
                     final_table.append(final)
                 with Drawing() as draw:
                     for row in final_table:
@@ -164,11 +167,9 @@ class Map(interactions.Extension):
                     for row in final_table:
                         region_text = row[0].replace(' ', '\n')
                         draw.text(row[1], row[2], f"{region_text}")
-                    draw(fi)
-                with Drawing() as draw:
-                    draw.font = 'Times New Roman'
-                    draw.font_size = 40
                     draw.fill_color = Color('white')
+                    draw.stroke_color = Color('white')
+                    draw.stroke_width = 0
                     draw.text_alignment = 'center'
                     for row in final_table:
                         region_text = row[0].replace(' ', '\n')

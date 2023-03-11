@@ -20,8 +20,10 @@ intents.message_content = True
 """Declare bot and add all cogs"""
 # bot = commands.Bot(command_prefix=config['Prefix'], intents=intents)
 bot = interactions.Client(token=token['Token'], intents=intents, logging=logging.INFO)
-defdump.load_extensions(bot)
-
+try:
+    defdump.load_extensions(bot)
+except interactions.LibraryException as e:
+    print(e)
 
 @bot.event
 async def on_ready():

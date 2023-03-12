@@ -6,6 +6,6 @@ __all__ = [
     #'debug',
     #'dbdebug',
     #'turntools',
-    #'map',
+    'map',
     'info'
 ]

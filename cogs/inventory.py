@@ -1,6 +1,9 @@
 import interactions
+import yaml
+
 from database import *
 from sqlalchemy import text
+
 
 # all class names from this file have to be included in def below
 def setup(bot):
@@ -91,7 +94,7 @@ class Inventory(interactions.Extension):
     @interactions.option(name='country', description='a')
     @interactions.option(name='item', description='b')
     @interactions.option(name='amount', description='c')
-    async def add(self, ctx: interactions.CommandContext, user: str, country: str):
+    async def add(self, ctx: interactions.CommandContext, country: str, item: str, amount: str):
         if not ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
             await ctx.send("You have no power here!")
             return

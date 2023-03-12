@@ -1,0 +1,35 @@
+--- # this means start of the document
+# this is comment
+language: 'polski'
+inventory:
+  description: 'Zarządzanie ekwipunkiem'
+
+  list:
+    description: 'Zobacz ekwipunek'
+    options: # lista, wywoływana indeksami
+      - option: 'panstwo'
+        description: 'Podaj nazwę państwa lub oznacz gracza'
+      - option: 'sortuj'
+        description: 'Sortuj ekwipunek'
+        choices:
+          - choice:
+            name: 'wg nazwy'
+          - choice:
+            name: 'wg ilości'
+      - option: 'porzadek'
+        description: 'Rosnąco/Malejąco'
+        choices:
+          - choice:
+            name: 'rosnąco'
+          - choice:
+            name: 'malejąco'
+
+map.description               : 'Zapytaj kartografa o mapy'
+map.option.map.name           : 'mapa'
+map.option.map.description    : 'Jaka mapa?'
+map.option.map.choice.province: 'Prowicji'
+map.option.map.choice.region  : 'Regionów'
+map.option.map.choice.terrain : 'Terenu'
+map.option.borders.name       : 'kontury'
+map.option.borders.description: 'Dodać kontury prowincji?'
+... # this means end of a document

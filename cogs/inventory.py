@@ -1,6 +1,4 @@
 import interactions
-import yaml
-
 from database import *
 from sqlalchemy import text
 
@@ -16,51 +14,67 @@ class Inventory(interactions.Extension):
         self.bot = bot
 
     @interactions.extension_command(description='Zarządzanie ekwipunkiem')
-    async def ekwipunek(self, ctx: interactions.CommandContext):
+    async def inventory(self, ctx: interactions.CommandContext):
         return
 
-    @ekwipunek.subcommand(description='Zobacz ekwipunek')
-    @interactions.option(name='panstwo', description='Podaj nazwę państwa lub oznacz gracza')
-    @interactions.option(name='sortuj', description='Sortuj ekwipunek',
+    @inventory.subcommand(description='Zobacz ekwipunek')
+    @interactions.option(name='country', description='Podaj nazwę państwa lub oznacz gracza')
+    @interactions.option(name='sort', description='Sortuj ekwipunek',
                          choices=[
                              interactions.Choice(name='wg nazwy', value='name'),
                              interactions.Choice(name='wg ilości', value='count')
                          ])
-    @interactions.option(name='porzadek', description='Rosnąco/Malejąco',
+    @interactions.option(name='order', description='Rosnąco/Malejąco',
                          choices=[
                              interactions.Choice(name='rosnąco', value='ASC'),
                              interactions.Choice(name='malejąco', value='DESC')
                          ])
-    async def lista(self, ctx: interactions.CommandContext, panstwo: str='', sort: str='name', order: str='ASC'):
+    async def list(self, ctx: interactions.CommandContext, country: str='', sort: str='name', order: str='ASC'):
         await ctx.defer()
 
         connection = db.pax_engine.connect()
-        if panstwo.startswith('<@') and panstwo.endswith('>'): # if a ping
+        if country.startswith('<@') and country.endswith('>'): # if a ping
             # id = panstwo[2:-1]
-            result = connection.execute(text(f'SELECT country_name FROM players NATURAL JOIN countries WHERE player_id = {panstwo[2:-1]}')).fetchone()
+            result = connection.execute(text(f'SELECT country_name FROM players NATURAL JOIN countries WHERE player_id = {country[2:-1]}')).fetchone()
             if result is None:
                 await ctx.send('Ten gracz nie ma przypisanego państwa.')
                 connection.close()
                 return
-            panstwo = result[0]
+            country = result[0]
         else:
-            result = connection.execute(text(f'SELECT country_name FROM countries WHERE country_name = "{panstwo}"')).fetchone()
+            result = connection.execute(text(f'SELECT country_name FROM countries WHERE country_name = "{country}"')).fetchone()
             if result is None:
                 await ctx.send('Takie państwo nie istnieje.')
                 connection.close()
                 return
 
-        result = connection.execute(text(f'SELECT DISTINCT item_name, quantity FROM inventories NATURAL JOIN countries NATURAL JOIN items WHERE LOWER(country_name) = LOWER("{panstwo}")')).fetchall()
-        await ctx.send(f'a {result}')
+        result = connection.execute(text(f'SELECT DISTINCT item_name, quantity, item_emoji FROM inventories NATURAL JOIN countries NATURAL JOIN items WHERE LOWER(country_name) = LOWER("{country}")')).fetchall()
+
+        embed = interactions.Embed(
+            title=f'Magazyny państwa {country}',
+            footer=interactions.EmbedFooter(text='This is a footer.'),
+        )
+        items = ""
+        quantities = ""
+
+        for item, quantity, emoji in result:
+            if quantity == 0:
+                continue
+            items += f'{item}\n'
+            quantities += str(quantity) + '\n'
+
+        embed.add_field(name='Zasób', value=items, inline=True)
+        embed.add_field(name='Ilość', value=quantities, inline=True)
+        await ctx.send(embeds=embed)
 
         connection.close()
         return
 
-    @ekwipunek.subcommand(description='Przekaż coś innemu graczu.')
+    @inventory.subcommand(description='Przekaż coś innemu graczu.')
     async def daj(self, ctx: interactions.CommandContext):
         pass
 
-    @ekwipunek.subcommand(description='Zaproponuj coś innemu graczu.')
+    @inventory.subcommand(description='Zaproponuj coś innemu graczu.')
     @interactions.option(description='Jaką akcję chcesz wykonać?',
                          choices=[
                             interactions.Choice(name='dodaj', value='add'),
@@ -90,12 +104,11 @@ class Inventory(interactions.Extension):
             case _:
                 pass
 
-    @ekwipunek.subcommand(description='!ADMIN ONLY!')
+    @inventory.subcommand(description='!ADMIN ONLY!')
     @interactions.option(name='country', description='a')
-    @interactions.option(name='item', description='b')
-    @interactions.option(name='amount', description='c')
-    async def add(self, ctx: interactions.CommandContext, country: str, item: str, amount: str):
-        if not ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+    @interactions.option(name='items', description='b')
+    async def add(self, ctx: interactions.CommandContext, country: str, items: str):
+        if not await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
             await ctx.send("You have no power here!")
             return
 
@@ -105,7 +118,7 @@ class Inventory(interactions.Extension):
         if country.startswith('<@') and country.endswith('>'):  # if a ping
             # id = panstwo[2:-1]
             result = connection.execute(text(
-                f'SELECT country_name FROM players NATURAL JOIN countries WHERE player_id = {country[2:-1]}')).fetchone()
+                f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {country[2:-1]};')).fetchone()
             if result is None:
                 await ctx.send('Ten gracz nie ma przypisanego państwa.')
                 connection.close()
@@ -113,14 +126,51 @@ class Inventory(interactions.Extension):
             country = result[0]
         else:
             result = connection.execute(
-                text(f'SELECT country_name FROM countries WHERE country_name = "{country}"')).fetchone()
+                text(f'SELECT country_id FROM countries WHERE LOWER(country_name) = LOWER("{country}");')).fetchone()
             if result is None:
-                await ctx.send('Takie państwo nie istnieje.')
+                await ctx.send(f'Państwo "{country}" nie istnieje.')
                 connection.close()
                 return
+            country = result[0]
 
+        items = items.lower()
+        items = items.split(',')
+        for i in range(len(items)):
+            items[i] = items[i].strip()
+            items[i] = items[i].split(' ')
+            result = connection.execute(text(f'SELECT item_id FROM items WHERE LOWER(item_name) = LOWER("{items[i][0]}");')).fetchone()
+            if result is None:
+                await ctx.send(f'Nie istnieje przedmiot o nazwie: {items[i][0]}!')
+                return
+            items[i].append(result[0])
 
-        await ctx.send(f'a {result}')
+        # for i in range(len(items)):
+        #     items[i] = items[i].split()
+        endqueries = []
+        result = connection.execute(
+            text(f'SELECT DISTINCT LOWER(item_name), quantity, item_id FROM inventories '
+                 f'NATURAL JOIN countries NATURAL JOIN items '
+                 f'WHERE country_id = {country};')).fetchall()
+        # Now iterate through items and amounts and if there is something in result -> increase quantity.
+        # Update. Then insert into the rest
+        for item in items:
+            found = False
+            for row in result:
+                if item[0] == row[0]:
+                    found = True
+                    endqueries.append(f'UPDATE inventories SET quantity = quantity + {item[1]} WHERE item_id = {item[2]} and country_id = {country};')
+                    break
+            if not found:
+                endqueries.append(f'INSERT INTO inventories VALUES ({item[2]},{country},{item[1]});')
+        connection.rollback()
+        print(endqueries)
+        connection.begin()
+        for query in endqueries:
+            connection.execute(text(query))
+        connection.commit()
+
+        country_name = connection.execute(text(f'SELECT country_name FROM countries WHERE country_id = {country};')).fetchone()[0]
+        await ctx.send(f'Przekazano wymienione przedmioty państwu {country_name}. // Tak potem to zmienie')
 
         connection.close()
         return

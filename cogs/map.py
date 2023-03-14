@@ -45,13 +45,13 @@ class Map(interactions.Extension):
                                   interactions.Choice(name="Nazwy Regionów", value="region_name"),
                                   interactions.Choice(name="Nazwy Państw", value="country_name")]
                          )
-    @interactions.option(name='legenda', description='Jaką legendę chcesz?',
-                         choices=[interactions.Choice(name="Żadna", value="none"),
-                                  interactions.Choice(name="dummy", value="dummy")]
-                         )
+    # @interactions.option(name='legenda', description='Jaką legendę chcesz?',
+    #                      choices=[interactions.Choice(name="Żadna", value="none"),
+    #                               interactions.Choice(name="dummy", value="dummy")]
+    #                      )
     @interactions.option(name='admin', description='Jesteś admin?')
     async def mapa(self, ctx: interactions.CommandContext,
-                   map_type: str, borders: str, information: str, legend: str, admin: str = ''):
+                   map_type: str, borders: str, information: str, admin: str = ''):  # legend: str
         # START THE CLOCK
         st = time.time()
         # PaxBot is thinking...
@@ -240,11 +240,11 @@ class Map(interactions.Extension):
                     draw(fi)
                 title = f"{title}, z nazwami państw."
 
-        match legend:
-            case "none":
-                pass
-            case "dummy":
-                dummy = "dummy"
+        # match legend:
+        #     case "none":
+        #         pass
+        #     case "dummy":
+        #         dummy = "dummy"
         # STOP THE CLOCK
         et = time.time()
         elapsed_time = et - st

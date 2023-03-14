@@ -77,11 +77,20 @@ class Info(interactions.Extension):
                 return
         else:  # If string is (hopefully) a country name.
             result_countries = connection.execute(
-                text(f'SELECT * FROM players NATURAL JOIN countries WHERE country_name = "{c_input}"')).fetchone()
+                text(f'SELECT * FROM players NATURAL JOIN countries WHERE country_name = "{c_input}"')).fetchall()
             if result_countries is None:
                 await ctx.send('Takie państwo nie istnieje.')
                 connection.close()
                 return
+            # Checking for multiple players
+            if len(result_countries) == 1:
+                return
+            else:
+                names = ''
+                for x in result_countries:
+                    names = f"{names} {x[2]}"
+                result_countries = list(result_countries[0])
+                result_countries[2] = names
         print(result_countries)
         # Embed items
         user = await interactions.get(
@@ -89,11 +98,14 @@ class Info(interactions.Extension):
         pop_sum = connection.execute(text(
             f"SELECT SUM(province_pops) FROM provinces WHERE country_id = {result_countries[0]}")).fetchone()
         capital = connection.execute(text(
-            f"SELECT province_name FROM provinces WHERE province_id={result_countries[10]}")).fetchone()
+            f"SELECT province_name FROM provinces WHERE province_id = {result_countries[10]}")).fetchone()
         province_sum = connection.execute(text(
-            f"SELECT COUNT(*) FROM provinces WHERE country_id={result_countries[0]}")).fetchone()
+            f"SELECT COUNT(*) FROM provinces WHERE country_id = {result_countries[0]}")).fetchone()
         religion = connection.execute(text(
-            f"SELECT religion_name FROM religions WHERE religion_id={result_countries[9]}")).fetchone()
+            f"SELECT religion_name FROM religions WHERE religion_id = {result_countries[9]}")).fetchone()
+        # autonomy = connection.execute(text(
+        #   f"SELECT COUNT(*),SUM(province_autonomy) FROM provinces WHERE country_id={result_countries[0]}")).fetchone()
+        # autonomy = f"{autonomy[1] / autonomy[0]}%"
 
         embed_footer = interactions.EmbedFooter(
             text=result_countries[13],
@@ -111,12 +123,13 @@ class Info(interactions.Extension):
         fb = interactions.EmbedField(name="", value="", inline=False)
         f1 = interactions.EmbedField(name="Władca", value=result_countries[7], inline=True)
         f2 = interactions.EmbedField(name="Ustrój", value=result_countries[8], inline=True)
-        f3 = interactions.EmbedField(name="Stolica", value=f"{capital[0]} (#{result_countries[10]})", inline=True)
-        f4 = interactions.EmbedField(name="Liczba Prowincji", value=province_sum[0], inline=True)
+        f3 = interactions.EmbedField(name="Stolica", value=f"{capital[0]} ({result_countries[10]})", inline=True)
+        f4 = interactions.EmbedField(name="Domena", value=f"{province_sum[0]} prowincji.", inline=True)
         f5 = interactions.EmbedField(name="Religia", value=religion[0], inline=True)
-        f6 = interactions.EmbedField(name="Populacja", value=str(pop_sum[0]), inline=True)
-        f7 = interactions.EmbedField(name="Autonomia", value="W kraju panuje anarchia mój panie!", inline=True)
-        f8 = interactions.EmbedField(name="Kanały", value="<#1084509996106137632>\n<#1064216866798710904>", inline=True)
+        f6 = interactions.EmbedField(name="Populacja", value=f"{pop_sum[0]} osób.", inline=True)
+        # f7 = interactions.EmbedField(name="Autonomia", value=autonomy, inline=True)
+        f8 = interactions.EmbedField(name="Dyplomacja", value="<#1084509996106137632>", inline=True)
+        f9 = interactions.EmbedField(name="Wydarzenia", value="<#1064216866798710904>", inline=True)
 
         # Building the Embed
         embed = interactions.Embed(
@@ -127,7 +140,7 @@ class Info(interactions.Extension):
             footer=embed_footer,
             thumbnail=embed_thumbnail,
             author=embed_author,
-            fields=[f1, f2, fb, f3, f4, fb, f5, f6, fb, f7, fb, fb, f8]
+            fields=[f1, f2, fb, f3, f4, fb, f5, f6, fb, f8, f9]
         )
         await ctx.send(embeds=embed)
 

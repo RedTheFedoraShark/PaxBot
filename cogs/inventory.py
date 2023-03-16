@@ -18,7 +18,7 @@ class Inventory(interactions.Extension):
         return
 
     @inventory.subcommand(description='Zobacz ekwipunek')
-    @interactions.option(name='country', description='Podaj nazwę państwa lub oznacz gracza')
+    @interactions.option(name='country', description='Podaj nazwę państwa lub oznacz gracza. Zostaw puste dla swojego.')
     @interactions.option(name='sort', description='Sortuj ekwipunek',
                          choices=[
                              interactions.Choice(name='wg nazwy', value='name'),
@@ -43,12 +43,15 @@ class Inventory(interactions.Extension):
                 connection.close()
                 return
             country = result[0]
-        else:
+        elif country != '':
             result = connection.execute(text(f'SELECT country_name FROM countries WHERE country_name = "{country}"')).fetchone()
             if result is None:
                 await ctx.send('Takie państwo nie istnieje.')
                 connection.close()
                 return
+        else:
+            country = connection.execute(
+                text(f'SELECT country_name from players NATURAL JOIN countries WHERE player_id = {ctx.author.id};')).fetchone()[0]
 
         result = connection.execute(
             text(f'SELECT DISTINCT item_name, quantity, item_emoji '
@@ -151,12 +154,12 @@ class Inventory(interactions.Extension):
             items[i].append(result[0])
 
         result = connection.execute(
-            text(f'SELECT quantity, item_id FROM inventories WHERE country_id = {author_country}')).fetchall()
+            text(f'SELECT quantity, item_id FROM inventories WHERE country_id = {author_country[0]}')).fetchall()
         player_inventory = [item for item in result]
         for item in items:
             player_has_item = False
             for jtem in player_inventory:
-                if item[2] == jtem[1] and item[1] <= jtem[0]:
+                if item[2] == jtem[1] and int(item[1]) <= jtem[0]:
                     player_has_item = True
                     break
             if not player_has_item:
@@ -182,13 +185,12 @@ class Inventory(interactions.Extension):
                         f'WHERE item_id = {item[2]} and country_id = {country};')
                     endqueries.append(
                         f'UPDATE inventories SET quantity = quantity - {item[1]} '
-                        f'WHERE item_id = {item[2]} and country_id = {author_country};')
+                        f'WHERE item_id = {item[2]} and country_id = {author_country[0]};')
                     endmessage += f'{item[1]} {item[0]}, '
                     break
             if not found:
                 endqueries.append(f'INSERT INTO inventories VALUES ({item[2]},{country},{item[1]});')
         connection.rollback()
-        print(endqueries)
         connection.begin()
         for query in endqueries:
             try:
@@ -202,7 +204,7 @@ class Inventory(interactions.Extension):
 
         country_name = connection.execute(
             text(f'SELECT country_name FROM countries WHERE country_id = {country};')).fetchone()[0]
-        await ctx.send(f'Przekazano {endmessage[:-1]} państwu {country_name}.')
+        await ctx.send(f'Przekazano: {endmessage[0:-2:1]} państwu {country_name}.')
 
         connection.close()
 
@@ -275,7 +277,7 @@ class Inventory(interactions.Extension):
                 endqueries.append(
                     f'INSERT INTO inventories VALUES ({item[2]},{country},{item[1]});')
         connection.rollback()
-        print(endqueries)
+
         connection.begin()
         for query in endqueries:
             try:
@@ -289,7 +291,7 @@ class Inventory(interactions.Extension):
 
         country_name = connection.execute(
             text(f'SELECT country_name FROM countries WHERE country_id = {country};')).fetchone()[0]
-        await ctx.send(f'Przekazano {endmessage[:-1]} państwu {country_name}.')
+        await ctx.send(f'Przekazano: {endmessage[0:-2:1]} państwu {country_name}.')
 
         connection.close()
         return

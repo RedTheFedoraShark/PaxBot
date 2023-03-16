@@ -37,14 +37,15 @@ async def on_ready():
 
 @bot.event
 async def on_command(ctx: interactions.CommandContext):
+    options = f'{ctx.data.options[0].name}, {[f"{o.name}:{o.value}" for o in ctx.data.options[0].options]}'
     print(timestamp() +
           Colorful.CVIOLET + str(ctx.author.name) +
           "[" + str(ctx.author.id) + "] " +
           Colorful.CBLUE + "called " +
           Colorful.CVIOLET + str(ctx.data.name) +
+          Colorful.CBLUE + " with options: " +
+          Colorful.CVIOLET + str(options) +
           Colorful.CEND)
-
-
 bot.start()
 
 print(timestamp() + Colorful.CBLUE + "I am dead.")

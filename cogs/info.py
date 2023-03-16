@@ -8,6 +8,27 @@ def setup(bot):
     Info(bot)
 
 
+async def build_refuse_embed(self):
+    embed_author = interactions.EmbedAuthor(
+        name="Talar",
+        icon_url="https://i.imgur.com/kpZr5oC.png"
+    )
+    f1 = interactions.EmbedField(
+        name="Wygeneruj sobie własne!",
+        value="... połkie haczyk, spławik - i jeszcze kawałek wędki upierdoli!",
+        inline=True
+    )
+    # Building the Embed
+    embed = interactions.Embed(
+        title="Łapy precz!",
+        # description=result_countries[5],
+        color=int("5C4033", 16),
+        author=embed_author,
+        fields=[f1]
+    )
+    return embed
+
+
 async def build_country_embed(self, country_id: str):
     connection = db.pax_engine.connect()
     query = connection.execute(text(
@@ -171,6 +192,12 @@ class Info(interactions.Extension):
     @interactions.extension_component("countries_select")
     async def on_select(self, ctx: interactions.ComponentContext, options: list[str]):
         print(ctx.author.id)
-        embeds = await build_country_embed(self, options[0])
-        await ctx.edit(embeds=embeds)
+        print(ctx.message.interaction.user.id)
+        if ctx.author.id == ctx.message.interaction.user.id:
+            embeds = await build_country_embed(self, options[0])
+            await ctx.edit(embeds=embeds)
+            await ctx.disable_all_components()
+        else:
+            embeds = await build_refuse_embed(self)
+            await ctx.send(embeds=embeds, ephemeral=True)
 

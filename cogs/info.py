@@ -2,31 +2,11 @@ import interactions
 from database import *
 from sqlalchemy import text
 import time
+from interactions.ext.paginator import Page, Paginator
 
 
 def setup(bot):
     Info(bot)
-
-
-async def build_refuse_embed(self):
-    embed_author = interactions.EmbedAuthor(
-        name="Talar",
-        icon_url="https://i.imgur.com/kpZr5oC.png"
-    )
-    f1 = interactions.EmbedField(
-        name="Wygeneruj sobie własne!",
-        value="... połkie haczyk, spławik - i jeszcze kawałek wędki upierdoli!",
-        inline=True
-    )
-    # Building the Embed
-    embed = interactions.Embed(
-        title="Łapy precz!",
-        # description=result_countries[5],
-        color=int("5C4033", 16),
-        author=embed_author,
-        fields=[f1]
-    )
-    return embed
 
 
 async def build_country_embed(self, country_id: str):
@@ -174,30 +154,23 @@ class Info(interactions.Extension):
                 await ctx.send('Takie państwo nie istnieje.')
                 connection.close()
                 return
-        options = await build_select_menu()
 
-        selection = interactions.SelectMenu(
-            options=options,
-            placeholder="Kraje",
-            custom_id="countries_select",
-            )
-        print(country_id, country_id[0])
-        print(ctx.author.id)
-        embeds = await build_country_embed(self, country_id[0])
         et = time.time()
         print(et-st)
 
-        await ctx.send(embeds=embeds, components=selection)
+        query = db.pax_engine.connect().execute(text(
+            f'SELECT COUNT(*) FROM countries WHERE NOT country_id BETWEEN 253 AND 255')).fetchone()
+        pages = []
+        for x in range(int(query[0])):
+            embed = await build_country_embed(self, str(x + 1))
+            print(str(x+1))
+            pages.append(Page(embeds=embed))
 
-    @interactions.extension_component("countries_select")
-    async def on_select(self, ctx: interactions.ComponentContext, options: list[str]):
-        print(ctx.author.id)
-        print(ctx.message.interaction.user.id)
-        if ctx.author.id == ctx.message.interaction.user.id:
-            embeds = await build_country_embed(self, options[0])
-            await ctx.edit(embeds=embeds)
-            await ctx.disable_all_components()
-        else:
-            embeds = await build_refuse_embed(self)
-            await ctx.send(embeds=embeds, ephemeral=True)
-
+        await Paginator(
+            client=self.bot,
+            ctx=ctx,
+            author_only=True,
+            timeout=300,
+            message="test",
+            pages=pages
+        ).run()

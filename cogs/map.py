@@ -43,15 +43,16 @@ class Map(interactions.Extension):
                                   interactions.Choice(name="ID Prowincji", value="province_id"),
                                   interactions.Choice(name="Nazwy Prowincji", value="province_name"),
                                   interactions.Choice(name="Nazwy Regionów", value="region_name"),
-                                  interactions.Choice(name="Nazwy Państw", value="country_name")]
+                                  interactions.Choice(name="Nazwy Państw", value="country_name"),
+                                  interactions.Choice(name="Armie", value="army")]
                          )
-    # @interactions.option(name='legenda', description='Jaką legendę chcesz?',
-    #                      choices=[interactions.Choice(name="Żadna", value="none"),
-    #                               interactions.Choice(name="dummy", value="dummy")]
-    #                      )
+    @interactions.option(name='legenda', description='Jaką legendę chcesz?',
+                         choices=[interactions.Choice(name="Żadna", value="none"),
+                                  interactions.Choice(name="dummy", value="dummy")]
+                         )
     @interactions.option(name='admin', description='Jesteś admin?')
-    async def mapa(self, ctx: interactions.CommandContext,
-                   map_type: str, borders: str, information: str, admin: str = ''):  # legend: str
+    async def map(self, ctx: interactions.CommandContext,
+                  map_type: str, borders: str, information: str, legend: str, admin: str = ''):  # legend: str
         # START THE CLOCK
         st = time.time()
         # PaxBot is thinking...
@@ -239,12 +240,79 @@ class Map(interactions.Extension):
                         draw.text(row[1], row[2], f"{region_text}")
                     draw(fi)
                 title = f"{title}, z nazwami państw."
+            case "army":
+                fi.resize(3256, 3256)
+                province_vison = []
+                # Getting vision (only provinces for now)
+                if admin == "admin":
+                    if 917544661588004875 in ctx.author.roles:
+                        print("Admin")
+                        for i in range(321):
+                            province_vison.append(i+1)
+                        province_vison = str(province_vison).replace('[', '(').replace(']', ')')
+                    else:
+                        print("Chuj nie admin")
+                        await ctx.send("Chuj nie admin.")
+                        return
+                else:
+                    author_id = db.pax_engine.connect().execute(text(
+                        f"SELECT country_id FROM players WHERE player_id = {ctx.author.id}")).fetchone()
+                    result = db.pax_engine.connect().execute(text(
+                        f"SELECT province_id FROM provinces WHERE country_id = {author_id[0]}")).fetchall()
+                    result2 = db.pax_engine.connect().execute(text(
+                        f"SELECT province_id, province_id_2 FROM borders")).fetchall()
+                    table = []
+                    for x in result:
+                        table.append(x[0])
+                    for line in result2:
+                        if line[0] in table or line[1] in table:
+                            province_vison.append(line)
+                    # ADD UNIT VISION HERE #
+                    # ADD UNIT VISION HERE #
+                    # ADD UNIT VISION HERE #
+                    province_vison = {x for ln in province_vison for x in ln}
+                    province_vison = str(province_vison).replace('{', '(').replace('}', ')')
+                print(province_vison)
+                # Getting the things you actually see
+                table = db.pax_engine.connect().execute(text(
+                    f"SELECT army_strenght, manpower, army_visible, "
+                    f"armies.country_id, pixel_capital_x, pixel_capital_y, armies.province_id FROM armies "
+                    f"NATURAL JOIN units_cost LEFT JOIN provinces ON armies.province_id = provinces.province_id "
+                    f"WHERE provinces.province_id in {province_vison}")).fetchall()
+                print(table)
+                # Merging units of the same country in the same province
+                result = []
+                for row in table:
+                    manpower = 0
+                    strenght = 0
+                    units = 0
+                    for row2 in table:
+                        if row[6] == row2[6] and row[3] == row2[3]:
+                            manpower += row2[1]
+                            strenght += row2[0]
+                            units += 1
+                    if units >= 1:
+                        temp_row = (int(strenght/units), manpower, row[2], row[3], row[4], row[5])
+                        if temp_row not in result:
+                            result.append(temp_row)
+                print(result)
+                # Finally drawing this piece of shit onto the canvas.
+                frame = Image(filename="maps/army/frame.png")
+                fr = frame.clone()
+                first_layer = Image(width=80, height=26, background=Color('transparent'))
+                for row in result:
+                    fl = first_layer.clone()
+                    with Drawing() as draw:
+                        draw.composite(operator="atop", left=row[4]*2-40, top=row[5]*2-13, width=fr.width, height=fr.height, image=fr)
+                        draw(fi)
 
-        # match legend:
-        #     case "none":
-        #         pass
-        #     case "dummy":
-        #         dummy = "dummy"
+                title = f"{title}, z armiami."
+
+        match legend:
+            case "none":
+                pass
+            case "dummy":
+                dummy = "dummy"
         # STOP THE CLOCK
         et = time.time()
         elapsed_time = et - st

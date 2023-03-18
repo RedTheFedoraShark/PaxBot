@@ -67,17 +67,6 @@ async def build_country_embed(self, country_id: str):
     return embed
 
 
-async def build_select_menu():
-    connection = db.pax_engine.connect()
-    options = []
-    query = connection.execute(text(
-        f'SELECT country_name, country_id, country_desc FROM countries WHERE country_id NOT BETWEEN 253 AND 255')).fetchall()
-
-    for row in query:
-        options.append(interactions.SelectOption(label=f"{row[0]}", value=f"{row[1]}", description=f"{row[2]}"))
-    return options
-
-
 class Info(interactions.Extension):
 
     def __init__(self, bot):

@@ -288,8 +288,8 @@ class Map(interactions.Extension):
                     units = 0
                     for row2 in table:
                         if row[6] == row2[6] and row[3] == row2[3]:
-                            manpower += row2[1]
-                            strenght += row2[0]
+                            strenght += int(row2[0])
+                            manpower += int(row2[1] * (row2[0] / 100))
                             units += 1
                     if units >= 1:
                         temp_row = (int(strenght/units), manpower, row[2], row[3], row[4], row[5])
@@ -299,12 +299,30 @@ class Map(interactions.Extension):
                 # Finally drawing this piece of shit onto the canvas.
                 frame = Image(filename="maps/army/frame.png")
                 fr = frame.clone()
-                first_layer = Image(width=80, height=26, background=Color('transparent'))
-                for row in result:
-                    fl = first_layer.clone()
-                    with Drawing() as draw:
-                        draw.composite(operator="atop", left=row[4]*2-40, top=row[5]*2-13, width=fr.width, height=fr.height, image=fr)
-                        draw(fi)
+                with Drawing() as draw:
+                    draw.font = 'Times New Roman'
+                    draw.font_size = 18
+                    draw.stroke_width = 0
+                    draw.text_alignment = 'center'
+                    for row in result:
+                        banner = Image(filename=f"maps/army/{row[3]}.png")
+                        bn = banner.clone()
+                        draw.fill_color = Color('green')
+                        draw.rectangle(left=row[4] * 2 + 32, right=row[4] * 2 + 36,
+                                       top=row[5] * 2 - 10, bottom=row[5] * 2 + 10)
+                        draw.fill_color = Color('red')
+                        draw.rectangle(left=row[4] * 2 + 32, right=row[4] * 2 + 36,
+                                       top=row[5] * 2 - 11, bottom=row[5] * 2 - 11 - (int(row[0] / 5) - 20))
+                        draw.composite(operator="atop", left=row[4] * 2 - 37, top=row[5] * 2 - 10, width=bn.width,
+                                       height=bn.height, image=bn)
+                        draw.composite(operator="atop", left=row[4] * 2 - 40, top=row[5] * 2 - 13, width=fr.width,
+                                       height=fr.height, image=fr)
+                        draw.fill_color = Color('white')
+                        if row[1] >= 10000:
+                            draw.text(row[4] * 2 + 7, row[5] * 2 + 7, f"{row[1] / 1000}k")
+                        else:
+                            draw.text(row[4] * 2 + 7, row[5] * 2 + 7, f"{row[1]}")
+                    draw(fi)
 
                 title = f"{title}, z armiami."
 

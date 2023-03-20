@@ -20,8 +20,10 @@ intents.message_content = True
 """Declare bot and add all cogs"""
 # bot = commands.Bot(command_prefix=config['Prefix'], intents=intents)
 bot = interactions.Client(token=token['Token'], intents=intents, logging=logging.INFO)
-defdump.load_extensions(bot)
-
+try:
+    defdump.load_extensions(bot)
+except interactions.LibraryException as e:
+    print(e)
 
 @bot.event
 async def on_ready():
@@ -35,13 +37,15 @@ async def on_ready():
 
 @bot.event
 async def on_command(ctx: interactions.CommandContext):
+    options = f'{ctx.data.options[0].name}, {[f"{o.name}:{o.value}" for o in ctx.data.options[0].options]}'
     print(timestamp() +
           Colorful.CVIOLET + str(ctx.author.name) +
           "[" + str(ctx.author.id) + "] " +
           Colorful.CBLUE + "called " +
           Colorful.CVIOLET + str(ctx.data.name) +
+          Colorful.CBLUE + " with options: " +
+          Colorful.CVIOLET + str(options) +
           Colorful.CEND)
-
 
 bot.start()
 

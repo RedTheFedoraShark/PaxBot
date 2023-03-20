@@ -45,7 +45,6 @@ class Army(interactions.Extension):
         return
 
     @army.subcommand(
-        name="list",
         description="aa",
         options=[
             interactions.Option(

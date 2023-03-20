@@ -46,6 +46,7 @@ async def on_command(ctx: interactions.CommandContext):
           Colorful.CBLUE + " with options: " +
           Colorful.CVIOLET + str(options) +
           Colorful.CEND)
+
 bot.start()
 
 print(timestamp() + Colorful.CBLUE + "I am dead.")

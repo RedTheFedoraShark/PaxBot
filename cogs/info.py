@@ -41,16 +41,15 @@ async def build_country_embed(self, country_id: str):
         icon_url=user.avatar_url
     )
     fb = interactions.EmbedField(name="", value="", inline=False)
-    f1 = interactions.EmbedField(name="Władca", value=query[8], inline=True)
-    f2 = interactions.EmbedField(name="Ustrój", value=query[9], inline=True)
-    f3 = interactions.EmbedField(name="Stolica", value=f"{query3[0]} ({query[10]})", inline=True)
-    f4 = interactions.EmbedField(name="Domena", value=f"{query2[1]} prowincji.", inline=True)
-    f5 = interactions.EmbedField(name="Religia", value=query[15], inline=True)
-    f6 = interactions.EmbedField(name="Populacja", value=f"{query2[0]} osób.", inline=True)
-    # f7 = interactions.EmbedField(name="Autonomia", value=autonomy, inline=True)
-    f8 = interactions.EmbedField(name="Dyplomacja", value="<#1084509996106137632>", inline=True)
-    f9 = interactions.EmbedField(name="Wydarzenia", value="<#1064216866798710904>", inline=True)
-    f10 = interactions.EmbedField(name="ID Kraju", value=f"{country_id} / {query4[0]}", inline=True)
+    f1 = interactions.EmbedField(name="Władca", value=f"```{query[8]}```", inline=True)
+    f2 = interactions.EmbedField(name="Ustrój", value=f"```{query[9]}```", inline=True)
+    f3 = interactions.EmbedField(name="Stolica", value=f"```ansi\n{query3[0]} \u001b[0;30m({query[10]})```",
+                                 inline=True)
+    f4 = interactions.EmbedField(name="Domena", value=f"```{query2[1]} prowincji.```", inline=True)
+    f5 = interactions.EmbedField(name="Religia", value=f"```{query[15]}```", inline=True)
+    f6 = interactions.EmbedField(name="Populacja", value=f"```{query2[0]} osób.```", inline=True)
+    f7 = interactions.EmbedField(name="Dyplomacja", value="<#1084509996106137632>", inline=True)
+    f8 = interactions.EmbedField(name="ID Kraju", value=f"{country_id} / {query4[0]}", inline=True)
 
     # Building the Embed
     embed = interactions.Embed(
@@ -61,7 +60,7 @@ async def build_country_embed(self, country_id: str):
         footer=embed_footer,
         thumbnail=embed_thumbnail,
         author=embed_author,
-        fields=[f1, f2, fb, f3, f4, fb, f5, f6, fb, f8, f9, f10]
+        fields=[f1, f2, fb, f3, f4, fb, f5, f6, fb, f7, f8]
     )
     connection.close()
     return embed
@@ -132,15 +131,19 @@ class Info(interactions.Extension):
             country_id = connection.execute(text(
                 f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {c_input[2:-1]}')).fetchone()
             if country_id is None:
-                await ctx.send('Ten gracz nie ma przypisanego państwa.')
+                await ctx.send(f'Państwo - {c_input} - nie istnieje.')
                 connection.close()
                 return
         else:  # If string is (hopefully) a country name.
-            country_id = connection.execute(
-                text(f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{c_input}"'
-                     )).fetchone()
+            country_id = None
+            if '"' in c_input:
+                pass
+            else:
+                country_id = connection.execute(
+                    text(f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{c_input}"'
+                         )).fetchone()
             if country_id is None:
-                await ctx.send('Takie państwo nie istnieje.')
+                await ctx.send(f'Państwo - {c_input} - nie istnieje.')
                 connection.close()
                 return
 
@@ -154,12 +157,13 @@ class Info(interactions.Extension):
             embed = await build_country_embed(self, str(x + 1))
             print(str(x+1))
             pages.append(Page(embeds=embed))
-
+        print(country_id)
         await Paginator(
             client=self.bot,
             ctx=ctx,
             author_only=True,
             timeout=300,
             message="test",
+            index=country_id[0]-1,
             pages=pages
         ).run()

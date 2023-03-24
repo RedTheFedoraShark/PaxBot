@@ -132,8 +132,38 @@ class Map(interactions.Extension):
                     draw(fi)
                 title = "Mapa Religii"
             case "pops":
-                final_image = Image(filename="maps/regions.png")
+                final_image = Image(filename="maps/plain.png")
+                image = Image(filename="maps/provinces.png")
                 fi = final_image.clone()
+                fi_2 = image.clone()
+                result = db.pax_engine.connect().execute(text(
+                    "SELECT pixel_capital_x, pixel_capital_y, province_pops, country_id FROM provinces"))
+                final_table = result.fetchall()
+                low_pop = final_table[0][2]
+                lar_pop = final_table[0][2]
+                for x in final_table:
+                    if x[2] < low_pop:
+                        low_pop = x[2]
+                    if x[2] > lar_pop:
+                        lar_pop = x[2]
+                diff = lar_pop - low_pop
+                clr = 255 / diff
+                with Drawing() as draw:
+                    for row in final_table:
+                        match row[3]:
+                            case 253 | 254:
+                                draw.fill_color = Color(f'#00000000')
+                                draw.color(row[0], row[1], 'replace')
+                            case _:
+                                r = int((254 - ((row[2] - low_pop) * clr))/2)
+                                g = int((1 + ((row[2] - low_pop) * clr))/2)
+                                print(r, g, diff, clr)
+                                draw.fill_color = Color(f'#{r:02x}{g:02x}00')
+                                draw.color(row[0], row[1], 'replace')
+                    draw(fi_2)
+                with Drawing() as draw:
+                    draw.composite(operator="atop", left=0, top=0, width=fi_2.width, height=fi_2.height, image=fi_2)
+                    draw(fi)
                 title = "Mapa Populacji"
             case "autonomy":
                 final_image = Image(filename="maps/plain.png")
@@ -268,40 +298,60 @@ class Map(interactions.Extension):
                 # Getting vision (only provinces for now)
                 if admin == "admin":
                     if 917544661588004875 in ctx.author.roles:
-                        print("Admin")
+                        admin_bool = True
                         for i in range(321):
                             province_vison.append(i+1)
                         province_vison = str(province_vison).replace('[', '(').replace(']', ')')
                     else:
-                        print("Chuj nie admin")
+                        admin_bool = False
                         await ctx.send("Chuj nie admin.")
                         return
                 else:
+                    admin_bool = False
                     author_id = db.pax_engine.connect().execute(text(
                         f"SELECT country_id FROM players WHERE player_id = {ctx.author.id}")).fetchone()
                     result = db.pax_engine.connect().execute(text(
                         f"SELECT province_id FROM provinces WHERE country_id = {author_id[0]}")).fetchall()
+                    result1 = db.pax_engine.connect().execute(text(
+                        f"SELECT province_id, vision_range FROM armies WHERE country_id = {author_id[0]}")).fetchall()
                     result2 = db.pax_engine.connect().execute(text(
                         f"SELECT province_id, province_id_2 FROM borders")).fetchall()
+                    # Making the vision of the player
+                    # Unit vision range part one
+                    for x in result1:
+                        if x[1] == 2:
+                            tup = x[0],
+                            if tup not in result:
+                                result.append(tup)
+                    # Add Borders
                     table = []
                     for x in result:
                         table.append(x[0])
                     for line in result2:
                         if line[0] in table or line[1] in table:
                             province_vison.append(line)
-                    # ADD UNIT VISION HERE #
-                    # ADD UNIT VISION HERE #
-                    # ADD UNIT VISION HERE #
+                    # Put the data into a set (remove duplicates)
                     province_vison = {x for ln in province_vison for x in ln}
+                    # Unit vision range part two
+                    for x in result1:
+                        if x[1] == 1:
+                            province_vison.add(x[0])
                     province_vison = str(province_vison).replace('{', '(').replace('}', ')')
-                print(province_vison)
                 # Getting the things you actually see
                 table = db.pax_engine.connect().execute(text(
                     f"SELECT army_strenght, manpower, army_visible, "
                     f"armies.country_id, pixel_capital_x, pixel_capital_y, armies.province_id FROM armies "
                     f"NATURAL JOIN units_cost LEFT JOIN provinces ON armies.province_id = provinces.province_id "
                     f"WHERE provinces.province_id in {province_vison}")).fetchall()
-                print(table)
+                # Remove invisible units for the player
+                if not admin:
+                    new_table = []
+                    for row in table:
+                        if row[2] == 0 and row[3] != author_id[0]:
+                            pass
+                        else:
+                            new_table.append(row)
+                    table = new_table
                 # Merging units of the same country in the same province
                 result = []
                 for row in table:
@@ -317,14 +367,12 @@ class Map(interactions.Extension):
                         temp_row = (int(strenght/units), manpower, row[2], row[3], row[4], row[5], row[6])
                         if temp_row not in result:
                             result.append(temp_row)
-                print(result)
                 # Sort it into a list of lists of tuples, so multiple countries can stand on one province.
                 sorted_result = []
                 index = 1
                 for province_id in range(321):
                     temp = []
                     for row in result:
-                        print(temp, row[6], province_id)
                         if not temp and row[6] != province_id:
                             pass
                         elif not temp and row[6] == province_id:
@@ -334,7 +382,6 @@ class Map(interactions.Extension):
                     if temp and tuple(temp) not in sorted_result:
                         sorted_result.append(tuple(temp))
                     index += 1
-                print(sorted_result)
                 # Finally drawing this piece of shit onto the canvas.
                 frame = Image(filename="maps/army/frame.png")
                 fr = frame.clone()
@@ -343,8 +390,17 @@ class Map(interactions.Extension):
                     draw.font_size = 18
                     draw.stroke_width = 0
                     draw.text_alignment = 'center'
-                    for row in result:
-                        draw_army(draw, fr, row, 0)
+                    for row in sorted_result:
+                        match len(row):
+                            case 1:
+                                draw_army(draw, fr, row[0], 0)
+                            case 2:
+                                draw_army(draw, fr, row[0], -12)
+                                draw_army(draw, fr, row[1], 12)
+                            case 3:
+                                draw_army(draw, fr, row[0], -22)
+                                draw_army(draw, fr, row[1], 0)
+                                draw_army(draw, fr, row[2], 22)
                     draw(fi)
 
                 title = f"{title}, z armiami."
@@ -357,7 +413,6 @@ class Map(interactions.Extension):
         # STOP THE CLOCK
         et = time.time()
         elapsed_time = et - st
-        print(str(elapsed_time)[0:5])
         fi.save(filename="maps/final_image.png")
         file = interactions.File("maps/final_image.png")
         embed_footer = interactions.EmbedFooter(

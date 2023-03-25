@@ -1,16 +1,16 @@
 import time
 
 import interactions
-import json
 import numpy as np
 from wand.image import Image
 from wand.drawing import Drawing
 from wand.color import Color
 from sqlalchemy import text
 from database import *
+import json
 
-with open("./config/token.json") as f:
-    t = json.load(f)
+with open("./config/config.json") as f:
+    config = json.load(f)
 
 
 def setup(bot):
@@ -19,7 +19,7 @@ def setup(bot):
 
 def draw_army(draw, fr, row: tuple, y: int):
     draw.push()
-    banner = Image(filename=f"maps/army/{row[3]}.png")
+    banner = Image(filename=f"gfx/army/{row[3]}.png")
     bn = banner.clone()
     draw.fill_color = Color('green')
     draw.rectangle(left=row[4] * 2 + 32, right=row[4] * 2 + 36,
@@ -83,23 +83,23 @@ class Map(interactions.Extension):
 
         match map_type:
             case "provinces":
-                final_image = Image(filename="maps/provinces.png")
+                final_image = Image(filename="gfx/maps/provinces.png")
                 fi = final_image.clone()
                 title = "Mapa Prowincji"
             case "regions":
-                final_image = Image(filename="maps/regions.png")
+                final_image = Image(filename="gfx/maps/regions.png")
                 fi = final_image.clone()
                 title = "Mapa Regionów"
             case "terrains":
-                final_image = Image(filename="maps/terrains.png")
+                final_image = Image(filename="gfx/maps/terrains.png")
                 fi = final_image.clone()
                 title = "Mapa Terenów"
             case "goods":
-                final_image = Image(filename="maps/regions.png")
+                final_image = Image(filename="gfx/maps/regions.png")
                 fi = final_image.clone()
                 title = "Mapa Zasobów"
             case "countries":
-                final_image = Image(filename="maps/provinces.png")
+                final_image = Image(filename="gfx/maps/provinces.png")
                 fi = final_image.clone()
                 final_table = []
                 result = db.pax_engine.connect().execute(text(
@@ -120,7 +120,7 @@ class Map(interactions.Extension):
                     draw(fi)
                 title = "Mapa Polityczna"
             case "religions":
-                final_image = Image(filename="maps/provinces.png")
+                final_image = Image(filename="gfx/maps/provinces.png")
                 fi = final_image.clone()
                 result = db.pax_engine.connect().execute(text(
                     "SELECT pixel_capital_x, pixel_capital_y, religion_color FROM provinces NATURAL JOIN religions"))
@@ -132,8 +132,8 @@ class Map(interactions.Extension):
                     draw(fi)
                 title = "Mapa Religii"
             case "pops":
-                final_image = Image(filename="maps/plain.png")
-                image = Image(filename="maps/provinces.png")
+                final_image = Image(filename="gfx/maps/plain.png")
+                image = Image(filename="gfx/maps/provinces.png")
                 fi = final_image.clone()
                 fi_2 = image.clone()
                 result = db.pax_engine.connect().execute(text(
@@ -166,8 +166,8 @@ class Map(interactions.Extension):
                     draw(fi)
                 title = "Mapa Populacji"
             case "autonomy":
-                final_image = Image(filename="maps/plain.png")
-                image = Image(filename="maps/provinces.png")
+                final_image = Image(filename="gfx/maps/plain.png")
+                image = Image(filename="gfx/maps/provinces.png")
                 fi = final_image.clone()
                 fi_2 = image.clone()
                 result = db.pax_engine.connect().execute(text(
@@ -198,7 +198,7 @@ class Map(interactions.Extension):
             case "no":
                 pass
             case "yes":
-                first_layer = Image(filename="maps/borders.png")
+                first_layer = Image(filename="gfx/maps/borders.png")
                 fl = first_layer.clone()
                 with Drawing() as draw:
                     draw.composite(operator="atop", left=0, top=0, width=fl.width, height=fl.height, image=fl)
@@ -209,14 +209,14 @@ class Map(interactions.Extension):
             case "none":
                 title = f"{title}."
             case "province_id":
-                first_layer = Image(filename="maps/province_id.png")
+                first_layer = Image(filename="gfx/maps/province_id.png")
                 fl = first_layer.clone()
                 with Drawing() as draw:
                     draw.composite(operator="atop", left=0, top=0, width=fl.width, height=fl.height, image=fl)
                     draw(fi)
                 title = f"{title}, z ID prowincji."
             case "province_name":
-                fi.resize(3256, 3256)
+                fi.scale(3256, 3256)
                 table = db.pax_engine.connect().execute(text(
                     "SELECT province_name, pixel_capital_x, pixel_capital_y FROM provinces"))
                 final_table = table.fetchall()
@@ -293,19 +293,14 @@ class Map(interactions.Extension):
                     draw(fi)
                 title = f"{title}, z nazwami państw."
             case "army":
-                fi.resize(3256, 3256)
-                province_vison = []
-                # Getting vision (only provinces for now)
-                if admin == "admin":
-                    if 917544661588004875 in ctx.author.roles:
-                        admin_bool = True
-                        for i in range(321):
-                            province_vison.append(i+1)
-                        province_vison = str(province_vison).replace('[', '(').replace(']', ')')
-                    else:
-                        admin_bool = False
-                        await ctx.send("Chuj nie admin.")
-                        return
+                province_vision = []
+                # Getting vision
+                if admin == "admin" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+                    admin_bool = True
+                    for i in range(321):
+                        province_vision.append(i+1)
+                    province_vision_list = province_vision
+                    province_vision = str(province_vision).replace('[', '(').replace(']', ')')
                 else:
                     admin_bool = False
                     author_id = db.pax_engine.connect().execute(text(
@@ -329,22 +324,23 @@ class Map(interactions.Extension):
                         table.append(x[0])
                     for line in result2:
                         if line[0] in table or line[1] in table:
-                            province_vison.append(line)
+                            province_vision.append(line)
                     # Put the data into a set (remove duplicates)
-                    province_vison = {x for ln in province_vison for x in ln}
+                    province_vision = {x for ln in province_vision for x in ln}
                     # Unit vision range part two
                     for x in result1:
                         if x[1] == 1:
-                            province_vison.add(x[0])
-                    province_vison = str(province_vison).replace('{', '(').replace('}', ')')
+                            province_vision.add(x[0])
+                    province_vision_list = province_vision
+                    province_vision = str(province_vision).replace('{', '(').replace('}', ')')
                 # Getting the things you actually see
                 table = db.pax_engine.connect().execute(text(
                     f"SELECT army_strenght, manpower, army_visible, "
                     f"armies.country_id, pixel_capital_x, pixel_capital_y, armies.province_id FROM armies "
                     f"NATURAL JOIN units_cost LEFT JOIN provinces ON armies.province_id = provinces.province_id "
-                    f"WHERE provinces.province_id in {province_vison}")).fetchall()
+                    f"WHERE provinces.province_id IN {province_vision}")).fetchall()
                 # Remove invisible units for the player
-                if not admin:
+                if not admin_bool:
                     new_table = []
                     for row in table:
                         if row[2] == 0 and row[3] != author_id[0]:
@@ -383,8 +379,25 @@ class Map(interactions.Extension):
                         sorted_result.append(tuple(temp))
                     index += 1
                 # Finally drawing this piece of shit onto the canvas.
-                frame = Image(filename="maps/army/frame.png")
+                frame = Image(filename="gfx/army/frame.png")
                 fr = frame.clone()
+                image = Image(filename="gfx/maps/provinces.png")
+                fi_2 = image.clone()
+                all_provinces = db.pax_engine.connect().execute(text(
+                    f"SELECT province_id, pixel_capital_x, pixel_capital_y FROM provinces")).fetchall()
+                with Drawing() as draw:
+                    for row in all_provinces:
+                        if row[0] in province_vision_list:
+                            draw.fill_color = Color(f'#00000000')
+                            draw.color(row[1], row[2], 'replace')
+                        else:
+                            draw.fill_color = Color(f'#00000080')
+                            draw.color(row[1], row[2], 'replace')
+                    draw(fi_2)
+                with Drawing() as draw:
+                    draw.composite(operator="atop", left=0, top=0, width=fi_2.width, height=fi_2.height, image=fi_2)
+                    draw(fi)
+                    fi.scale(3256, 3256)
                 with Drawing() as draw:
                     draw.font = 'Times New Roman'
                     draw.font_size = 18
@@ -413,8 +426,8 @@ class Map(interactions.Extension):
         # STOP THE CLOCK
         et = time.time()
         elapsed_time = et - st
-        fi.save(filename="maps/final_image.png")
-        file = interactions.File("maps/final_image.png")
+        fi.save(filename="gfx/maps/final_image.png")
+        file = interactions.File("gfx/maps/final_image.png")
         embed_footer = interactions.EmbedFooter(
             text=f"{(str(elapsed_time)[0:5])}s",
             icon_url="https://i.imgur.com/K202lGe.png"

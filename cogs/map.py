@@ -68,13 +68,9 @@ class Map(interactions.Extension):
                                   interactions.Choice(name="Nazwy Państw", value="country_name"),
                                   interactions.Choice(name="Armie", value="army")]
                          )
-    @interactions.option(name='legenda', description='Jaką legendę chcesz?',
-                         choices=[interactions.Choice(name="Żadna", value="none"),
-                                  interactions.Choice(name="dummy", value="dummy")]
-                         )
     @interactions.option(name='admin', description='Jesteś admin?')
     async def map(self, ctx: interactions.CommandContext,
-                  map_type: str, borders: str, information: str, legend: str, admin: str = ''):  # legend: str
+                  map_type: str, borders: str, information: str, admin: str = ''):  # legend: str
         # START THE CLOCK
         st = time.time()
         # PaxBot is thinking...
@@ -335,10 +331,10 @@ class Map(interactions.Extension):
                     province_vision = str(province_vision).replace('{', '(').replace('}', ')')
                 # Getting the things you actually see
                 table = db.pax_engine.connect().execute(text(
-                    f"SELECT army_strenght, manpower, army_visible, "
+                    f"SELECT army_strenght, quantity, army_visible, "
                     f"armies.country_id, pixel_capital_x, pixel_capital_y, armies.province_id FROM armies "
                     f"NATURAL JOIN units_cost LEFT JOIN provinces ON armies.province_id = provinces.province_id "
-                    f"WHERE provinces.province_id IN {province_vision}")).fetchall()
+                    f"WHERE provinces.province_id IN {province_vision} AND item_id=3")).fetchall()
                 # Remove invisible units for the player
                 if not admin_bool:
                     new_table = []
@@ -418,11 +414,6 @@ class Map(interactions.Extension):
 
                 title = f"{title}, z armiami."
 
-        match legend:
-            case "none":
-                pass
-            case "dummy":
-                dummy = "dummy"
         # STOP THE CLOCK
         et = time.time()
         elapsed_time = et - st

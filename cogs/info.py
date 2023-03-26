@@ -1,8 +1,9 @@
 import interactions
+from interactions.ext.paginator import Page, Paginator
 from database import *
+from config import models
 from sqlalchemy import text
 import time
-from interactions.ext.paginator import Page, Paginator
 import json
 
 with open("./config/config.json") as f:
@@ -21,7 +22,8 @@ async def build_country_embed(self, country_id: int):
     # Repairing names for multiple players on one country
     names = ''
     for x in query:
-        names = f"{x[3]} {names}"
+        name = await interactions.get(self.bot, interactions.User, object_id=x[2])
+        names = f"{name.username}#{name.discriminator} {names}"
     query = list(query[0])
     query[3] = names
     print(query)
@@ -50,9 +52,9 @@ async def build_country_embed(self, country_id: int):
     f3 = interactions.EmbedField(name="Stolica", value=f"```ansi\n{query3[0]} \u001b[0;30m({query[10]})```",
                                  inline=True)
     f4 = interactions.EmbedField(name="Domena", value=f"```{query2[1]} prowincji.```", inline=True)
-    f5 = interactions.EmbedField(name="Religia", value=f"```{query[15]}```", inline=True)
+    f5 = interactions.EmbedField(name="Religia", value=f"```{query[16]}```", inline=True)
     f6 = interactions.EmbedField(name="Populacja", value=f"```{query2[0]} osób.```", inline=True)
-    f7 = interactions.EmbedField(name="Dyplomacja", value="<#1084509996106137632>", inline=True)
+    f7 = interactions.EmbedField(name="Dyplomacja", value=f"{query[15]}", inline=True)
     f8 = interactions.EmbedField(name="ID Kraju", value=f"{country_id} / {query4[0]}", inline=True)
 
     # Building the Embed
@@ -70,7 +72,37 @@ async def build_country_embed(self, country_id: int):
     return embed
 
 
-async def build_item_embed(self, item_id: int, country_id: int):
+async def build_item_embed(ctx, self, item_id: int, country_id: int):
+    connection = db.pax_engine.connect()
+    query = connection.execute(text(
+        f'SELECT * FROM items WHERE item_id = "{item_id}"'
+    )).fetchall()
+    query = list(query[0])
+    # Creating embed elements
+    user = await interactions.get(self.bot, interactions.User, object_id=ctx.author.id)
+    embed_thumbnail = interactions.EmbedImageStruct(
+        url=query[4]
+    )
+    fb = interactions.EmbedField(name="", value="", inline=False)
+    f1 = interactions.EmbedField(name="Opis", value=f"```{query[2]}```", inline=True)
+    embed_author = interactions.EmbedAuthor(
+        name=user.username + "#" + user.discriminator,
+        icon_url=user.avatar_url
+    )
+    # Building the Embed
+    embed = interactions.Embed(
+        color=int(query[5], 16),
+        title=query[1],
+        # description=result_countries[5],
+        thumbnail=embed_thumbnail,
+        author=embed_author,
+        fields=[f1]
+    )
+    connection.close()
+    return embed
+
+
+async def build_item_embed_admin(item_id: int):
     connection = db.pax_engine.connect()
     query = connection.execute(text(
         f'SELECT * FROM items WHERE item_id = "{item_id}"'
@@ -105,52 +137,33 @@ class Info(interactions.Extension):
         pass
 
     @info.subcommand(description="Informacje o komendach.")
-    @interactions.option(description='The test', required=True,
-                         choices=[interactions.Choice(name="/mapa", value="map"),
-                                  interactions.Choice(name="/armia", value="army")]
+    @interactions.option(name="nazwa_komendy", description='Wpisz nazwę komendy którą chcesz sprawdzić.', required=True,
+                         choices=[interactions.Choice(name="/map", value="map"),
+                                  interactions.Choice(name="/inventory list", value="army")]
                          )
     async def command(self, ctx: interactions.CommandContext, command_name: str):
+        index = 0
         match command_name:
             case "map":
-                embed_footer = interactions.EmbedFooter(
-                    text="test footer",
-                    icon_url="https://i.imgur.com/fKL31aD.jpg"
-                )
-                embed_thumbnail = interactions.EmbedImageStruct(
-                    url="https://i.imgur.com/TwROy0B.png",
-                    height=50,
-                    width=50
-                )
-                embed = interactions.Embed(
-                    color=0xe8d44f,
-                    title="/mapa",
-                    description="Mapa to komenda.",
-                    url="https://imgur.com/C5MGo6o",
-                    footer=embed_footer,
-                    thumbnail=embed_thumbnail
-                )
+                index = 0
             case "army":
-                embed_footer = interactions.EmbedFooter(
-                    text="test footer",
-                    icon_url="https://i.imgur.com/fKL31aD.jpg"
-                )
-                embed_thumbnail = interactions.EmbedImageStruct(
-                    url="https://i.imgur.com/TwROy0B.png",
-                    height=50,
-                    width=50
-                )
-                embed = interactions.Embed(
-                    color=0xe8d44f,
-                    title="/mapa",
-                    description="Mapa to komenda.",
-                    url="https://imgur.com/C5MGo6o",
-                    footer=embed_footer,
-                    thumbnail=embed_thumbnail
-                )
-        await ctx.send(embeds=embed)
+                index = 1
+
+        e1 = Page(embeds=models.info_command_map())
+        e2 = Page(embeds=models.info_command_army())
+        pages = [e1, e2]
+        await Paginator(
+            client=self.bot,
+            ctx=ctx,
+            author_only=True,
+            timeout=300,
+            message="test",
+            index=index,
+            pages=pages
+        ).run()
 
     @info.subcommand(description="Informacje o krajach.")
-    @interactions.option(name='country', description='Wpisz dokładną nazwę kraju lub zpinguj gracza.', required=True)
+    @interactions.option(name='kraj', description='Wpisz dokładną nazwę kraju lub zpinguj gracza.', required=True)
     async def country(self, ctx: interactions.CommandContext, country: str):
 
         st = time.time()
@@ -213,24 +226,39 @@ class Info(interactions.Extension):
         for row in query:
             single_list.append(row[0])
         # single_list = str(single_list).replace('[', '(').replace(']', ')')
-        country_id = db.pax_engine.connect().execute(text(
-            f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {ctx.author.id}')).fetchone()
-        match len(single_list):
-            case 0:
-                await ctx.send("Nie masz nic w ekwipunku!")
-            case 1:
-                embed = await build_item_embed(self, single_list[0], country_id)
-                await ctx.send(embeds=embed)
-            case _:
-                pages = []
-                for item_id in single_list:
-                    embed = await build_item_embed(self, item_id, country_id)
-                    pages.append(Page(embeds=embed))
-                await Paginator(
-                    client=self.bot,
-                    ctx=ctx,
-                    author_only=True,
-                    timeout=300,
-                    message="test",
-                    pages=pages
-                ).run()
+        if admin == "admin" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            pages = []
+            for item_id in single_list:
+                embed = await build_item_embed_admin(item_id)
+                pages.append(Page(embeds=embed))
+            await Paginator(
+                client=self.bot,
+                ctx=ctx,
+                author_only=True,
+                timeout=300,
+                message="test",
+                pages=pages
+            ).run()
+        else:
+            country_id = db.pax_engine.connect().execute(text(
+                f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {ctx.author.id}')).fetchone()
+            print(single_list, country_id)
+            match len(single_list):
+                case 0:
+                    await ctx.send("Nie masz nic w ekwipunku!")
+                case 1:
+                    embed = await build_item_embed(ctx, self, single_list[0], country_id)
+                    await ctx.send(embeds=embed)
+                case _:
+                    pages = []
+                    for item_id in single_list:
+                        embed = await build_item_embed(ctx, self, item_id, country_id)
+                        pages.append(Page(embeds=embed))
+                    await Paginator(
+                        client=self.bot,
+                        ctx=ctx,
+                        author_only=True,
+                        timeout=300,
+                        message="test",
+                        pages=pages
+                    ).run()

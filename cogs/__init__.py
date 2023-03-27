@@ -8,5 +8,6 @@ __all__ = [
     #'turntools',
     'map',
     'info',
-    'inventory'
+    'inventory',
+    'commands'
 ]

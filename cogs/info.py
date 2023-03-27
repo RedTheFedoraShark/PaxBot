@@ -132,33 +132,62 @@ class Info(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
+    @interactions.extension_command(description='Ściąga z komendami Pax Zeonica.', scope='917078941213261914')
+    async def commands(self, ctx):
+        await ctx.send(embeds=models.commands())
+
     @interactions.extension_command(description='Testuj', scope='917078941213261914')  # , scope='917078941213261914'
     async def info(self, ctx: interactions.CommandContext):
         pass
 
     @info.subcommand(description="Informacje o komendach.")
     @interactions.option(name="nazwa_komendy", description='Wpisz nazwę komendy którą chcesz sprawdzić.', required=True,
-                         choices=[interactions.Choice(name="/map", value="map"),
-                                  interactions.Choice(name="/inventory list", value="army")]
+                         choices=[  # Information
+                                  interactions.Choice(name="/tutorial", value=0),
+                                  interactions.Choice(name="/commands", value=1),
+                                  interactions.Choice(name="/info command", value=2),
+                                  interactions.Choice(name="/info country", value=3),
+                                  interactions.Choice(name="/map", value=4),
+                                    # Inventory
+                                  interactions.Choice(name="/inventory list", value=5),
+                                  interactions.Choice(name="/inventory items", value=6),
+                                  interactions.Choice(name="/inventory give", value=7),
+                                    # Army
+                                  interactions.Choice(name="/army list", value=8),
+                                  interactions.Choice(name="/army templates", value=9),
+                                  interactions.Choice(name="/army recruit", value=10),
+                                  interactions.Choice(name="/army disband", value=11),
+                                  interactions.Choice(name="/army reorg", value=12),
+                                  interactions.Choice(name="/army rename", value=13),
+                                    # Buildings
+                                  interactions.Choice(name="/building list", value=14),
+                                  interactions.Choice(name="/building templates", value=15),
+                                  interactions.Choice(name="/building build", value=16),
+                                  interactions.Choice(name="/building destroy", value=17),
+                                  interactions.Choice(name="/building upgrade", value=18),
+                                    # Provinces
+                                  interactions.Choice(name="/province list", value=19),
+                                  interactions.Choice(name="/province rename", value=20)]
                          )
-    async def command(self, ctx: interactions.CommandContext, command_name: str):
-        index = 0
-        match command_name:
-            case "map":
-                index = 0
-            case "army":
-                index = 1
+    async def command(self, ctx: interactions.CommandContext, nazwa_komendy: int):
 
-        e1 = Page(embeds=models.info_command_map())
-        e2 = Page(embeds=models.info_command_army())
-        pages = [e1, e2]
+        raw = ('ic_tutorial', 'ic_commands', 'ic_info_command', 'ic_info_country', 'ic_map', 'ic_inventory_list',
+               'ic_inventory_items', 'ic_inventory_give', 'ic_army_list', 'ic_army_templates', 'ic_army_recruit',
+               'ic_army_disband', 'ic_army_reorg', 'ic_army_rename', 'ic_building_list', 'ic_building_templates',
+               'ic_building_build', 'ic_building_destroy', 'ic_building_upgrade', 'ic_province_list',
+               'ic_province_rename')
+        pages = []
+        for element in raw:
+            temp = getattr(models, element)
+            pages.append(Page(embeds=temp()))
+
         await Paginator(
             client=self.bot,
             ctx=ctx,
             author_only=True,
             timeout=300,
             message="test",
-            index=index,
+            index=nazwa_komendy,
             pages=pages
         ).run()
 

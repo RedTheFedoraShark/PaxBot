@@ -1,10 +1,11 @@
 import interactions
 
+author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
+                                  icon_url="https://i.imgur.com/4MFkrcH.png")
+fb = interactions.EmbedField(name="", value="", inline=False)
+
 
 def commands():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="Information",
                                  value=f"```ansi"
                                        f"\n\u001b[0;31m/tutorial\u001b[0;0m"
@@ -70,9 +71,6 @@ def commands():
 
 
 def ic_tutorial():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -89,18 +87,12 @@ def ic_tutorial():
 
 
 def ic_commands():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
-    f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
-                                                      f"\n\u001b[0;31mPusta\u001b[0;0m"
-                                                      f"\nPuste płótno.```", inline=True)
-    f2 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
-                                                       f"\u001b[0;35@ gracza lub nazwa kraju\u001b[0;0m"
-                                                       f"\nPokazuje inventory danego kraju.```", inline=True)
+    f1 = interactions.EmbedField(name="Przykłady:",
+                                 value=f"```ansi\n\u001b[0;40m/commands\u001b[0;0m```"
+                                       f"\nWyświetla ściągę komend.", inline=False)
     embed = interactions.Embed(
-        title="/army list",
-        description="Army List",
+        title="/commands",
+        description="Komenda wyświetla ściągę wszystkich komend na serwerze Pax Zeonica.",
         author=author,
         fields=[f1]
     )
@@ -108,90 +100,85 @@ def ic_commands():
 
 
 def ic_info_command():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
-    f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
-                                                      f"\n\u001b[0;31mPusta\u001b[0;0m"
-                                                      f"\nPuste płótno.```", inline=True)
-    f2 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
-                                                       f"\u001b[0;35@ gracza lub nazwa kraju\u001b[0;0m"
-                                                       f"\nPokazuje inventory danego kraju.```", inline=True)
+    f1 = interactions.EmbedField(name="[komenda]", value=f"```ansi"
+                                                         f"\n\u001b[0;31m•Nazwa Komendy\u001b[0;0m"
+                                                         f"\nWyświetla informacje danej komendy.```", inline=True)
+    f2 = interactions.EmbedField(name="Przykłady:",
+                                 value=f"```ansi\n\u001b[0;40m/info command [/info command]\u001b[0;0m```"
+                                       f"\nWyświetla stronę na której się właśnie znajdujesz.", inline=False)
     embed = interactions.Embed(
-        title="/army list",
-        description="Army List",
+        title="/info command [komenda]",
+        description="Wyświetla dokładne informacje dotyczące danej komendy.\n"
+                    "Właśnie jej używasz żeby sprawdzić informacje o komendzie '/info command'.",
         author=author,
-        fields=[f1]
+        fields=[f1, f2]
     )
     return embed
 
 
 def ic_info_country():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
-    f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
-                                                      f"\n\u001b[0;31mPusta\u001b[0;0m"
-                                                      f"\nPuste płótno.```", inline=True)
-    f2 = interactions.EmbedField(name="{admin}", value=f"```ansi"
-                                                       f"\n\u001b[0;35@ gracza lub nazwa kraju\u001b[0;0m"
-                                                       f"\nPokazuje inventory danego kraju.```", inline=True)
+    f1 = interactions.EmbedField(name="[kraj]", value=f"```ansi"
+                                                      f"\n\u001b[0;31m•@ gracza\u001b[0;0m"
+                                                      f"\nWyświetla informacje o kraju danego gracza."
+                                                      f"\n\u001b[0;31m•Nazwa Kraju\u001b[0;0m"
+                                                      f"\nWyświetla informacje o danym kraju.```", inline=True)
+    f2 = interactions.EmbedField(name="Przykłady:",
+                                 value=f"```ansi\n\u001b[0;40m/info country [@XnraD]\u001b[0;0m```"
+                                       f"\nWyświetla informacje o kraju Karbadia."
+                                       f"```ansi\n\u001b[0;40m/info country [Karbadia]\u001b[0;0m```"
+                                       f"\nWyświetla informacje o kraju Karbadia.", inline=False)
     embed = interactions.Embed(
-        title="/army list",
-        description="Army List",
+        title="/info country [kraj]",
+        description="Wyświetla informacje dotyczące podanego kraju.",
         author=author,
-        fields=[f1]
+        fields=[f1, f2]
     )
     return embed
 
 
 def ic_map():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
-                                                      f"\n\u001b[0;31mProwincji\u001b[0;0m"
+                                                      f"\n\u001b[0;31m•Prowincji\u001b[0;0m"
                                                       f"\n321 kolorowych prowincji."
-                                                      f"\n\u001b[0;31mRegionów\u001b[0;0m"
+                                                      f"\n\u001b[0;31m•Regionów\u001b[0;0m"
                                                       f"\n30 regionów zeonici."
-                                                      f"\n\u001b[0;31mZasobów\u001b[0;0m"
+                                                      f"\n\u001b[0;31m•Zasobów\u001b[0;0m"
                                                       f"\n29 różnych zasobów."
-                                                      f"\n\u001b[0;31mPolityczna\u001b[0;0m"
+                                                      f"\n\u001b[0;31m•Polityczna\u001b[0;0m"
                                                       f"\nWasze świetne państwa."
-                                                      f"\n\u001b[0;31mReligii\u001b[0;0m"
+                                                      f"\n\u001b[0;31m•Religii\u001b[0;0m"
                                                       f"\nReligie wasze i nasze."
-                                                      f"\n\u001b[0;31mPopulacji\u001b[0;0m"
+                                                      f"\n\u001b[0;31m•Populacji\u001b[0;0m"
                                                       f"\nPopulacje prowincji."
-                                                      f"\n\u001b[0;31mAutonomii\u001b[0;0m"
+                                                      f"\n\u001b[0;31m•Autonomii\u001b[0;0m"
                                                       f"\nAutnomie prowincji."
-                                                      f"\n\u001b[0;31mPusta\u001b[0;0m"
+                                                      f"\n\u001b[0;31m•Pusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
     f2 = interactions.EmbedField(name="[kontury]", value=f"```ansi"
-                                                         f"\n\u001b[0;32mNie\u001b[0;0m"
+                                                         f"\n\u001b[0;32m•Nie\u001b[0;0m"
                                                          f"\nBez konturów."
-                                                         f"\n\u001b[0;32mTak\u001b[0;0m"
+                                                         f"\n\u001b[0;32m•Tak\u001b[0;0m"
                                                          f"\nZ konturami.```", inline=True)
     f3 = interactions.EmbedField(name="[adnotacje]", value=f"```ansi"
-                                                           f"\n\u001b[0;33mŻadne\u001b[0;0m"
+                                                           f"\n\u001b[0;33m•Żadne\u001b[0;0m"
                                                            f"\nBrak adnotacji."
-                                                           f"\n\u001b[0;33mID Prowincji\u001b[0;0m"
+                                                           f"\n\u001b[0;33m•ID Prowincji\u001b[0;0m"
                                                            f"\nNumery prowincji."
-                                                           f"\n\u001b[0;33mNazwy Prowincji\u001b[0;0m"
+                                                           f"\n\u001b[0;33m•Nazwy Prowincji\u001b[0;0m"
                                                            f"\nNazwy waszych prowincji."
-                                                           f"\n\u001b[0;33mNazwy Regionów\u001b[0;0m"
+                                                           f"\n\u001b[0;33m•Nazwy Regionów\u001b[0;0m"
                                                            f"\nNazwy regionów Zeonici."
-                                                           f"\n\u001b[0;33mNazwy Państw\u001b[0;0m"
+                                                           f"\n\u001b[0;33m•Nazwy Państw\u001b[0;0m"
                                                            f"\nNazwy waszych państw."
-                                                           f"\n\u001b[0;33mArmie\u001b[0;0m"
+                                                           f"\n\u001b[0;33m•Armie\u001b[0;0m"
                                                            f"\nAdnotacje armii.```", inline=True)
     f4 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
-                                                       f"\u001b[0;35madmin\u001b[0;0m"
+                                                       f"\u001b[0;35m•admin\u001b[0;0m"
                                                        f"\nPokazuje wszystkie możliwe informacje.```", inline=True)
     f5 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n"
-                                       f"\u001b[0;40m/mapa [Polityczna] [Nie] [Armie]\u001b[0;0m```"
+                                 value=f"```ansi\n\u001b[0;40m/mapa [Polityczna] [Nie] [Armie]\u001b[0;0m```"
                                        f"\nGeneruje mapę z państwami graczy i armiami."
-                                       f"\u001b[0;40m/mapa [Prowincji] [Tak] [ID Prowincji]\u001b[0;0m```"
+                                       f"```ansi\n\u001b[0;40m/mapa [Prowincji] [Tak] [ID Prowincji]\u001b[0;0m```"
                                        f"\nGeneruje mapę prowincji, konturami i ID prowincji.", inline=False)
 
     embed = interactions.Embed(
@@ -206,26 +193,23 @@ def ic_map():
 
 
 def ic_inventory_list():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[tryb]", value=f"```ansi"
-                                                      f"\n\u001b[0;31mdokładny\u001b[0;0m"
+                                                      f"\n\u001b[0;31m•dokładny\u001b[0;0m"
                                                       f"\nInformacje w postaci szczegółowych stron."
-                                                      f"\n\u001b[0;31mprosty\u001b[0;0m"
+                                                      f"\n\u001b[0;31m•prosty\u001b[0;0m"
                                                       f"\nInformacje w postaci prostej listy.```", inline=True)
     f2 = interactions.EmbedField(name="{admin}", value=f"```ansi"
-                                                       f"\n\u001b[0;35m@ gracza lub nazwa kraju\u001b[0;0m"
+                                                       f"\n\u001b[0;35m•@ gracza lub nazwa kraju\u001b[0;0m"
                                                        f"\nPokazuje inventory danego kraju.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi"
-                                       f"\n\u001b[0;40m/inventory list [dokładny]\u001b[0;0m```"
+                                 value=f"```ansi\n\u001b[0;40m/inventory list [dokładny]\u001b[0;0m```"
                                        f"\nWyświela ekwipunek w postaci stron."
-                                       f"\n\u001b[0;40m/inventory list [prosty]\u001b[0;0m```"
+                                       f"```ansi\n\u001b[0;40m/inventory list [prosty]\u001b[0;0m```"
                                        f"\nWyświela ekwipunek w postaci listy.", inline=False)
     embed = interactions.Embed(
         title="/inventory list [tryb] {admin}",
-        description="Placeholder.",
+        description="Wyświetla ilość itemów które posiada państwo gracza oraz ich balans.\n"
+                    "W trybie dokładnym wyświetla również więcej informacji, np. szczegóły wydatków.",
         author=author,
         fields=[f1, f2, f3]
     )
@@ -233,18 +217,12 @@ def ic_inventory_list():
 
 
 def ic_inventory_items():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
-    f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
-                                                      f"\n\u001b[0;31mPusta\u001b[0;0m"
-                                                      f"\nPuste płótno.```", inline=True)
-    f2 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
-                                                       f"\u001b[0;35@ gracza lub nazwa kraju\u001b[0;0m"
-                                                       f"\nPokazuje inventory danego kraju.```", inline=True)
+    f1 = interactions.EmbedField(name="Przykłady:",
+                                 value=f"```ansi\n\u001b[0;40m/inventory\u001b[0;0m```"
+                                       f"\nWyświetla informacje o itemach.", inline=False)
     embed = interactions.Embed(
-        title="/army list",
-        description="Army List",
+        title="/inventory items",
+        description="Wyświetla informacje o itemach które posiada gracz.",
         author=author,
         fields=[f1]
     )
@@ -252,28 +230,28 @@ def ic_inventory_items():
 
 
 def ic_inventory_give():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
-    f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
-                                                      f"\n\u001b[0;31mPusta\u001b[0;0m"
-                                                      f"\nPuste płótno.```", inline=True)
-    f2 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
-                                                       f"\u001b[0;35@ gracza lub nazwa kraju\u001b[0;0m"
-                                                       f"\nPokazuje inventory danego kraju.```", inline=True)
+    f1 = interactions.EmbedField(name="[kraj]", value=f"```ansi"
+                                                      f"\n\u001b[0;31m•@ gracza\u001b[0;0m"
+                                                      f"\nGracz do którego kraju chcemy dać itemy."
+                                                      f"\n\u001b[0;31m•Nazwa Kraju\u001b[0;0m"
+                                                      f"\nKraj do którego chcemy dać itemy.```", inline=True)
+    f2 = interactions.EmbedField(name="[argument]", value=f"```ansi"
+                                                          f"\n\u001b[0;31m•Item i ilość\u001b[0;0m"
+                                                          f"\nRodzaj i ilość itemów które chcemy dać.", inline=True)
+    f3 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
+                                                       f"\u001b[0;35•admin\u001b[0;0m"
+                                                       f"\nPozwala na spawnowanie itemów.", inline=True)
     embed = interactions.Embed(
-        title="/army list",
-        description="Army List",
+        title="/army give [kraj] [argument] {admin}",
+        description="Daje innemu krajowi itemy z twojego inventory.\n"
+                    "Uważaj z kim handlujesz - jeśli ktoś nie dotrzyma umowy to twój problem IC!",
         author=author,
-        fields=[f1]
+        fields=[f1, f2, f3]
     )
     return embed
 
 
 def ic_army_list():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -290,9 +268,6 @@ def ic_army_list():
 
 
 def ic_army_templates():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -309,9 +284,6 @@ def ic_army_templates():
 
 
 def ic_army_recruit():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -328,9 +300,6 @@ def ic_army_recruit():
 
 
 def ic_army_disband():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -347,9 +316,6 @@ def ic_army_disband():
 
 
 def ic_army_reorg():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -366,9 +332,6 @@ def ic_army_reorg():
 
 
 def ic_army_rename():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -385,9 +348,6 @@ def ic_army_rename():
 
 
 def ic_building_list():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -404,9 +364,6 @@ def ic_building_list():
 
 
 def ic_building_templates():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -423,9 +380,6 @@ def ic_building_templates():
 
 
 def ic_building_build():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -442,9 +396,6 @@ def ic_building_build():
 
 
 def ic_building_destroy():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -461,9 +412,6 @@ def ic_building_destroy():
 
 
 def ic_building_upgrade():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -480,9 +428,6 @@ def ic_building_upgrade():
 
 
 def ic_province_list():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
@@ -499,9 +444,6 @@ def ic_province_list():
 
 
 def ic_province_rename():
-    author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
-                                      icon_url="https://i.imgur.com/4MFkrcH.png")
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
                                                       f"\n\u001b[0;31mPusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)

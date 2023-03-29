@@ -185,7 +185,7 @@ class Info(interactions.Extension):
             client=self.bot,
             ctx=ctx,
             author_only=True,
-            timeout=300,
+            timeout=600,
             message="test",
             index=nazwa_komendy,
             pages=pages

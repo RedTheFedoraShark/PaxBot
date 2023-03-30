@@ -173,9 +173,9 @@ class Info(interactions.Extension):
 
         raw = ('ic_tutorial', 'ic_commands', 'ic_info_command', 'ic_info_country', 'ic_map', 'ic_inventory_list',
                'ic_inventory_items', 'ic_inventory_give', 'ic_army_list', 'ic_army_templates', 'ic_army_recruit',
-               'ic_army_disband', 'ic_army_reorg', 'ic_army_rename', 'ic_building_list', 'ic_building_templates',
-               'ic_building_build', 'ic_building_destroy', 'ic_building_upgrade', 'ic_province_list',
-               'ic_province_rename')
+               'ic_army_disband', 'ic_army_reorg', 'ic_army_reinforce', 'ic_army_rename', 'ic_army_move',
+               'ic_army_orders', 'ic_building_list', 'ic_building_templates', 'ic_building_build',
+               'ic_building_destroy', 'ic_building_upgrade', 'ic_province_list', 'ic_province_rename')
         pages = []
         for element in raw:
             temp = getattr(models, element)

@@ -10,10 +10,13 @@ class TurnTools(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    def income(self):
+    async def income(self):
         pass
 
-    def movement(self):
+    async def migration(self):
+        pass
+
+    async def pop_growth(self):
         pass
 
     @interactions.extension_command()
@@ -24,3 +27,4 @@ class TurnTools(interactions.Extension):
         Rest of code in here
         """
         await defdump.load_cogs(self.bot)
+

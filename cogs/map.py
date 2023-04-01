@@ -23,7 +23,7 @@ def draw_army(draw, fr, row: tuple, y: int):
     bn = banner.clone()
     draw.fill_color = Color('green')
     draw.rectangle(left=row[4] * 2 + 32, right=row[4] * 2 + 36,
-                   top=row[5] * 2 - 10 + y, bottom=row[5] * 2 + 10+ y)
+                   top=row[5] * 2 - 10 + y, bottom=row[5] * 2 + 10 + y)
     draw.fill_color = Color('red')
     draw.rectangle(left=row[4] * 2 + 32, right=row[4] * 2 + 36,
                    top=row[5] * 2 - 11 + y, bottom=row[5] * 2 - 11 - (int(row[0] / 5) - 20) + y)
@@ -91,8 +91,30 @@ class Map(interactions.Extension):
                 fi = final_image.clone()
                 title = "Mapa Terenów"
             case "goods":
-                final_image = Image(filename="gfx/maps/regions.png")
+                final_image = Image(filename="gfx/maps/plain.png")
+                final_image_2 = Image(filename="gfx/maps/provinces.png")
                 fi = final_image.clone()
+                fi_2 = final_image_2.clone()
+                author_id = db.pax_engine.connect().execute(text(
+                    f"SELECT country_id FROM players WHERE player_id = {ctx.author.id}")).fetchone()
+                result = db.pax_engine.connect().execute(text(
+                    f"SELECT pixel_capital_x, pixel_capital_y, good_color, country_id "
+                    f"FROM goods NATURAL JOIN provinces")).fetchall()
+                if admin == "admin" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+                    admin_bool = True
+                with Drawing() as draw:
+                    for row in result:
+                        print(row[3], author_id)
+                        if row[3] == author_id[0] or admin_bool:
+                            draw.fill_color = Color(f'#{row[2]}')
+                            draw.color(row[0], row[1], 'replace')
+                        else:
+                            draw.fill_color = Color(f'#00000080')
+                            draw.color(row[0], row[1], 'replace')
+                    draw(fi_2)
+                with Drawing() as draw:
+                    draw.composite(operator="atop", left=0, top=0, width=fi_2.width, height=fi_2.height, image=fi_2)
+                    draw(fi)
                 title = "Mapa Zasobów"
             case "countries":
                 final_image = Image(filename="gfx/maps/provinces.png")
@@ -176,7 +198,7 @@ class Map(interactions.Extension):
                                 draw.fill_color = Color(f'#00000000')
                                 draw.color(row[0], row[1], 'replace')
                             case _:
-                                r = hex(int(255-(row[2]*2.5)))
+                                r = hex(int(255 - (row[2] * 2.5)))
                                 g = hex(int(0 + (row[2] * 2.5)))
                                 draw.fill_color = Color(f'#{str(r)[2:]}{str(g)[2:]}00')
                                 draw.color(row[0], row[1], 'replace')

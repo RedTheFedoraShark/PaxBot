@@ -16,3 +16,4 @@ config/token.json
 .idea/dataSources/aaf17995-c691-4a69-aaf3-2ce7972a97e0/storage_v2/_src_/schema/performance_schema.kIw0nw.meta
 .idea/sqldialects.xml
 .idea/dataSources.xml
+.idea/other.xml

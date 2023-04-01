@@ -1,5 +1,124 @@
 import interactions
+from database import *
+from sqlalchemy import text
 
+
+# /info country
+async def build_country_embed(self, country_id: int):
+    connection = db.pax_engine.connect()
+    query = connection.execute(text(
+        f'SELECT * FROM players NATURAL JOIN countries NATURAL JOIN religions WHERE country_id = "{country_id}"'
+    )).fetchall()
+    # Repairing names for multiple players on one country
+    names = ''
+    for x in query:
+        name = await interactions.get(self.bot, interactions.User, object_id=x[2])
+        names = f"{name.username}#{name.discriminator} {names}"
+    query = list(query[0])
+    query[3] = names
+    print(query)
+    query2 = connection.execute(text(
+        f'SELECT SUM(province_pops), COUNT(*) FROM provinces WHERE country_id = "{country_id}"')).fetchone()
+    query3 = connection.execute(text(
+        f'SELECT province_name FROM provinces WHERE province_id = "{query[10]}"')).fetchone()
+    query4 = connection.execute(text(
+        f'SELECT COUNT(*) FROM countries WHERE NOT country_id BETWEEN 253 AND 255')).fetchone()
+    user = await interactions.get(self.bot, interactions.User, object_id=query[2])
+    # Creating embed elements
+    embed_footer = interactions.EmbedFooter(
+        text=query[13],
+        icon_url=query[14]
+    )
+    embed_thumbnail = interactions.EmbedImageStruct(
+        url=query[12]
+    )
+    embed_author = interactions.EmbedAuthor(
+        name=query[3],
+        icon_url=user.avatar_url
+    )
+    fb = interactions.EmbedField(name="", value="", inline=False)
+    f1 = interactions.EmbedField(name="Władca", value=f"```{query[8]}```", inline=True)
+    f2 = interactions.EmbedField(name="Ustrój", value=f"```{query[9]}```", inline=True)
+    f3 = interactions.EmbedField(name="Stolica", value=f"```ansi\n{query3[0]} \u001b[0;30m({query[10]})```",
+                                 inline=True)
+    f4 = interactions.EmbedField(name="Domena", value=f"```{query2[1]} prowincji.```", inline=True)
+    f5 = interactions.EmbedField(name="Religia", value=f"```{query[16]}```", inline=True)
+    f6 = interactions.EmbedField(name="Populacja", value=f"```{query2[0]} osób.```", inline=True)
+    f7 = interactions.EmbedField(name="Dyplomacja", value=f"{query[15]}", inline=True)
+    f8 = interactions.EmbedField(name="ID Kraju", value=f"{country_id} / {query4[0]}", inline=True)
+
+    # Building the Embed
+    embed = interactions.Embed(
+        color=int(query[7], 16),
+        title=query[5],
+        # description=result_countries[5],
+        url=query[11],
+        footer=embed_footer,
+        thumbnail=embed_thumbnail,
+        author=embed_author,
+        fields=[f1, f2, fb, f3, f4, fb, f5, f6, fb, f7, f8]
+    )
+    connection.close()
+    return embed
+
+
+# /inventory items
+async def build_item_embed(ctx, self, item_id: int, country_id: int):
+    connection = db.pax_engine.connect()
+    query = connection.execute(text(
+        f'SELECT * FROM items WHERE item_id = "{item_id}"'
+    )).fetchall()
+    query = list(query[0])
+    # Creating embed elements
+    user = await interactions.get(self.bot, interactions.User, object_id=ctx.author.id)
+    embed_thumbnail = interactions.EmbedImageStruct(
+        url=query[4]
+    )
+    fb = interactions.EmbedField(name="", value="", inline=False)
+    f1 = interactions.EmbedField(name="Opis", value=f"```{query[2]}```", inline=True)
+    embed_author = interactions.EmbedAuthor(
+        name=user.username + "#" + user.discriminator,
+        icon_url=user.avatar_url
+    )
+    # Building the Embed
+    embed = interactions.Embed(
+        color=int(query[5], 16),
+        title=query[1],
+        # description=result_countries[5],
+        thumbnail=embed_thumbnail,
+        author=embed_author,
+        fields=[f1]
+    )
+    connection.close()
+    return embed
+
+
+async def build_item_embed_admin(item_id: int):
+    connection = db.pax_engine.connect()
+    query = connection.execute(text(
+        f'SELECT * FROM items WHERE item_id = "{item_id}"'
+    )).fetchall()
+    query = list(query[0])
+    # Creating embed elements
+    embed_thumbnail = interactions.EmbedImageStruct(
+        url=query[4]
+    )
+    fb = interactions.EmbedField(name="", value="", inline=False)
+    f1 = interactions.EmbedField(name="Opis", value=f"```{query[2]}```", inline=True)
+
+    # Building the Embed
+    embed = interactions.Embed(
+        color=int(query[5], 16),
+        title=query[1],
+        # description=result_countries[5],
+        thumbnail=embed_thumbnail,
+        fields=[f1]
+    )
+    connection.close()
+    return embed
+
+
+# /commands
 author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
                                   icon_url="https://i.imgur.com/4MFkrcH.png")
 fb = interactions.EmbedField(name="", value="", inline=False)
@@ -76,6 +195,7 @@ def commands():
     return embed
 
 
+# /info command
 def ic_tutorial():
     f1 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/tutorial\u001b[0;0m```"

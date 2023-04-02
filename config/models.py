@@ -16,7 +16,6 @@ async def build_country_embed(self, country_id: int):
         names = f"{name.username}#{name.discriminator} {names}"
     query = list(query[0])
     query[3] = names
-    print(query)
     query2 = connection.execute(text(
         f'SELECT SUM(province_pops), COUNT(*) FROM provinces WHERE country_id = "{country_id}"')).fetchone()
     query3 = connection.execute(text(
@@ -36,7 +35,6 @@ async def build_country_embed(self, country_id: int):
         name=query[3],
         icon_url=user.avatar_url
     )
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="Władca", value=f"```{query[8]}```", inline=True)
     f2 = interactions.EmbedField(name="Ustrój", value=f"```{query[9]}```", inline=True)
     f3 = interactions.EmbedField(name="Stolica", value=f"```ansi\n{query3[0]} \u001b[0;30m({query[10]})```",
@@ -64,6 +62,7 @@ async def build_country_embed(self, country_id: int):
 
 # /inventory items
 async def build_item_embed(ctx, self, item_id: int, country_id: int):
+    print(country_id)
     connection = db.pax_engine.connect()
     query = connection.execute(text(
         f'SELECT * FROM items WHERE item_id = "{item_id}"'
@@ -74,12 +73,11 @@ async def build_item_embed(ctx, self, item_id: int, country_id: int):
     embed_thumbnail = interactions.EmbedImageStruct(
         url=query[4]
     )
-    fb = interactions.EmbedField(name="", value="", inline=False)
-    f1 = interactions.EmbedField(name="Opis", value=f"```{query[2]}```", inline=True)
     embed_author = interactions.EmbedAuthor(
         name=user.username + "#" + user.discriminator,
         icon_url=user.avatar_url
     )
+    f1 = interactions.EmbedField(name="Opis", value=f"```{query[2]}```", inline=True)
     # Building the Embed
     embed = interactions.Embed(
         color=int(query[5], 16),
@@ -103,7 +101,6 @@ async def build_item_embed_admin(item_id: int):
     embed_thumbnail = interactions.EmbedImageStruct(
         url=query[4]
     )
-    fb = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="Opis", value=f"```{query[2]}```", inline=True)
 
     # Building the Embed
@@ -343,7 +340,7 @@ def ic_inventory_list():
     return embed
 
 
-def ic_inventory_items():
+def ic_inventory_item():
     f1 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/inventory item\u001b[0;0m```"
                                        f"\nWyświetla informacje o itemach.", inline=False)
@@ -622,8 +619,8 @@ def ic_army_rename():
                                        f"\nZmienia nazwę armii 'Pierwsza Chorągiew' na 'Chorągiew Cara'."
                                        f"```ansi\n\u001b[0;40m/army rename [Jednostka] [13] "
                                        f"[Gwardia Cara] \u001b[0;0m```"
-                                       f"\nZmienia nazwę jednostki #13 na 'Gwardia Cara'."
-                                 , inline=False)
+                                       f"\nZmienia nazwę jednostki #13 na 'Gwardia Cara'.",
+                                 inline=False)
     embed = interactions.Embed(
         title="/army rename [typ] [nazwa] [nowa_nazwa] {admin}",
         description="Zmienia nazwę jednostki lub armii państwa.\n"

@@ -100,6 +100,7 @@ class Map(interactions.Extension):
                 result = db.pax_engine.connect().execute(text(
                     f"SELECT pixel_capital_x, pixel_capital_y, good_color, country_id "
                     f"FROM goods NATURAL JOIN provinces")).fetchall()
+                admin_bool = False
                 if admin == "admin" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
                     admin_bool = True
                 with Drawing() as draw:

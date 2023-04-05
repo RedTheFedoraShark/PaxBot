@@ -84,24 +84,27 @@ class Inventory(interactions.Extension):
     @interactions.option(name='item', description='O jakim itemie wyświetlić informacje?', autocomplete=True)
     @interactions.option(name='admin', description='Jesteś admin?.')
     async def item(self, ctx: interactions.CommandContext, item: str, admin: str = ''):
+        country_id = db.pax_engine.connect().execute(text(
+            f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {ctx.author.id}')).fetchone()
+
         if admin == "admin" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
-            query = db.pax_engine.connect().execute(text(
-                f'SELECT item_id, item_name FROM items')).fetchall()
+            admin = True
+            query = db.pax_engine.connect().execute(text(f'SELECT item_id, item_name FROM items')).fetchall()
         else:
+            admin = False
             query = db.pax_engine.connect().execute(text(
-                f'SELECT item_id, item_name '
-                f'FROM players NATURAL JOIN countries NATURAL JOIN inventories NATURAL JOIN items '
-                f'WHERE player_id = {ctx.author.id} AND NOT quantity <= 0')).fetchall()
-        single_list = []
+                f'SELECT item_id, item_name FROM  countries NATURAL JOIN inventories NATURAL JOIN items '
+                f'WHERE country_id = {country_id[0]} AND NOT quantity <= 0')).fetchall()
+
         index = 0
         for i, row in enumerate(query):
             if str.lower(row[1]) == str.lower(item):
                 index = i
+        single_list = []
         for row in query:
             single_list.append(row[0])
-        # single_list = str(single_list).replace('[', '(').replace(']', ')')
 
-        if admin == "admin" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+        if admin:
             pages = []
             for item_id in single_list:
                 embed = await models.build_item_embed_admin(item_id)
@@ -117,18 +120,16 @@ class Inventory(interactions.Extension):
                 pages=pages
             ).run()
         else:
-            country_id = db.pax_engine.connect().execute(text(
-                f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {ctx.author.id}')).fetchone()
             match len(single_list):
                 case 0:
                     await ctx.send("Nie masz nic w ekwipunku!")
                 case 1:
-                    embed = await models.build_item_embed(ctx, self, single_list[0], country_id)
+                    embed = await models.build_item_embed(ctx, self, single_list[0], country_id[0])
                     await ctx.send(embeds=embed)
                 case _:
                     pages = []
                     for item_id in single_list:
-                        embed = await models.build_item_embed(ctx, self, item_id, country_id)
+                        embed = await models.build_item_embed(ctx, self, item_id, country_id[0])
                         pages.append(Page(embeds=embed))
                     await Paginator(
                         client=self.bot,
@@ -144,7 +145,7 @@ class Inventory(interactions.Extension):
     async def item_autocomplete(self, ctx: interactions.CommandContext, item: str = ""):
         items = db.pax_engine.connect().execute(text(
                 f'SELECT item_name FROM players NATURAL JOIN countries NATURAL JOIN inventories NATURAL JOIN items '
-                f'WHERE player_id = "{ctx.author.id}"')).fetchall()
+                f'WHERE player_id = "{ctx.author.id}" AND quantity > 0')).fetchall()
         if item == "":
             choices = [
                 interactions.Choice(name=item_name[0], value=item_name[0])

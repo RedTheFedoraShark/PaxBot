@@ -45,16 +45,19 @@ class Info(interactions.Extension):
                                   interactions.Choice(name="/army recruit", value=10),
                                   interactions.Choice(name="/army disband", value=11),
                                   interactions.Choice(name="/army reorg", value=12),
-                                  interactions.Choice(name="/army rename", value=13),
+                                  interactions.Choice(name="/army reinforce", value=13),
+                                  interactions.Choice(name="/army rename", value=14),
+                                  interactions.Choice(name="/army move", value=15),
+                                  interactions.Choice(name="/army orders", value=16),
                                     # Buildings
-                                  interactions.Choice(name="/building list", value=14),
-                                  interactions.Choice(name="/building templates", value=15),
-                                  interactions.Choice(name="/building build", value=16),
-                                  interactions.Choice(name="/building destroy", value=17),
-                                  interactions.Choice(name="/building upgrade", value=18),
+                                  interactions.Choice(name="/building list", value=17),
+                                  interactions.Choice(name="/building templates", value=18),
+                                  interactions.Choice(name="/building build", value=19),
+                                  interactions.Choice(name="/building destroy", value=20),
+                                  interactions.Choice(name="/building upgrade", value=21),
                                     # Provinces
-                                  interactions.Choice(name="/province list", value=19),
-                                  interactions.Choice(name="/province rename", value=20)]
+                                  interactions.Choice(name="/province list", value=22),
+                                  interactions.Choice(name="/province rename", value=23)]
                          )
     async def command(self, ctx: interactions.CommandContext, nazwa_komendy: int):
 

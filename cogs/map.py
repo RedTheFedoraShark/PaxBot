@@ -354,7 +354,7 @@ class Map(interactions.Extension):
                     province_vision = str(province_vision).replace('{', '(').replace('}', ')')
                 # Getting the things you actually see
                 table = db.pax_engine.connect().execute(text(
-                    f"SELECT army_strenght, quantity, army_visible, "
+                    f"SELECT army_strenght, item_quantity, army_visible, "
                     f"armies.country_id, pixel_capital_x, pixel_capital_y, armies.province_id FROM armies "
                     f"NATURAL JOIN units_cost LEFT JOIN provinces ON armies.province_id = provinces.province_id "
                     f"WHERE provinces.province_id IN {province_vision} AND item_id=3")).fetchall()

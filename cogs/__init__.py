@@ -9,5 +9,6 @@ __all__ = [
     'map',
     'info',
     'inventory',
-    'commands'
+    'commands',
+    'admin'
 ]

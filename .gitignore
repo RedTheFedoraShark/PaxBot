@@ -16,3 +16,9 @@ config/token.json
 .idea/dataSources/aaf17995-c691-4a69-aaf3-2ce7972a97e0/storage_v2/_src_/schema/performance_schema.kIw0nw.meta
 .idea/sqldialects.xml
 .idea/dataSources.xml
+.idea/other.xml
+.idea/dataSources/fec0ce8d-f54f-49ef-be2b-b5fca24de315.xml
+.idea/dataSources/fec0ce8d-f54f-49ef-be2b-b5fca24de315/storage_v2/_src_/schema/information_schema.FNRwLQ.meta
+.idea/dataSources/fec0ce8d-f54f-49ef-be2b-b5fca24de315/storage_v2/_src_/schema/mysql.osA4Bg.meta
+.idea/dataSources/fec0ce8d-f54f-49ef-be2b-b5fca24de315/storage_v2/_src_/schema/performance_schema.kIw0nw.meta
+.idea/inspectionProfiles/profiles_settings.xml

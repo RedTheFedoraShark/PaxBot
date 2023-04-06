@@ -1,5 +1,227 @@
-import interactions
+import random
 
+import interactions
+from database import *
+from sqlalchemy import text
+
+
+# /info country
+async def build_country_embed(self, country_id: int):
+    connection = db.pax_engine.connect()
+    query = connection.execute(text(
+        f'SELECT * FROM players NATURAL JOIN countries NATURAL JOIN religions WHERE country_id = "{country_id}"'
+    )).fetchall()
+    # Repairing names for multiple players on one country
+    names = ''
+    for x in query:
+        name = await interactions.get(self.bot, interactions.User, object_id=x[2])
+        names = f"{name.username}#{name.discriminator} {names}"
+    query = list(query[0])
+    query[3] = names
+    query2 = connection.execute(text(
+        f'SELECT SUM(province_pops), COUNT(*) FROM provinces WHERE country_id = "{country_id}"')).fetchone()
+    query3 = connection.execute(text(
+        f'SELECT province_name FROM provinces WHERE province_id = "{query[10]}"')).fetchone()
+    query4 = connection.execute(text(
+        f'SELECT COUNT(*) FROM countries WHERE NOT country_id BETWEEN 253 AND 255')).fetchone()
+    user = await interactions.get(self.bot, interactions.User, object_id=query[2])
+    # Creating embed elements
+    embed_footer = interactions.EmbedFooter(
+        text=query[13],
+        icon_url=query[14]
+    )
+    embed_thumbnail = interactions.EmbedImageStruct(
+        url=query[12]
+    )
+    embed_author = interactions.EmbedAuthor(
+        name=query[3],
+        icon_url=user.avatar_url
+    )
+    f1 = interactions.EmbedField(name="Władca", value=f"```{query[8]}```", inline=True)
+    f2 = interactions.EmbedField(name="Ustrój", value=f"```{query[9]}```", inline=True)
+    f3 = interactions.EmbedField(name="Stolica", value=f"```ansi\n{query3[0]} \u001b[0;30m({query[10]})```",
+                                 inline=True)
+    f4 = interactions.EmbedField(name="Domena", value=f"```{query2[1]} prowincji.```", inline=True)
+    f5 = interactions.EmbedField(name="Religia", value=f"```{query[16]}```", inline=True)
+    f6 = interactions.EmbedField(name="Populacja", value=f"```{query2[0]} osób.```", inline=True)
+    f7 = interactions.EmbedField(name="Dyplomacja", value=f"{query[15]}", inline=True)
+    f8 = interactions.EmbedField(name="ID Kraju", value=f"{country_id} / {query4[0]}", inline=True)
+
+    # Building the Embed
+    embed = interactions.Embed(
+        color=int(query[7], 16),
+        title=query[5],
+        # description=result_countries[5],
+        url=query[11],
+        footer=embed_footer,
+        thumbnail=embed_thumbnail,
+        author=embed_author,
+        fields=[f1, f2, fb, f3, f4, fb, f5, f6, fb, f7, f8]
+    )
+    connection.close()
+    return embed
+
+
+# /inventory items
+async def build_item_embed_good(ctx, self, item_id: int, country_id: int, item_query: list):
+    province_query = db.pax_engine.connect().execute(text(
+        f'SELECT item_id, item_name, item_color, item_image_url, item_desc, quantity, item_good '
+        f'FROM items NATURAL JOIN inventories '
+        f'WHERE item_id = "{item_id}" AND country_id = "{country_id}"'
+    )).fetchone()
+    # Creating embed elements
+    user = await interactions.get(self.bot, interactions.User, object_id=ctx.author.id)
+    embed_thumbnail = interactions.EmbedImageStruct(
+        url=item_query[3]
+    )
+    embed_author = interactions.EmbedAuthor(
+        name=user.username + "#" + user.discriminator,
+        icon_url=user.avatar_url
+    )
+    f1 = interactions.EmbedField(name="Opis", value=f"```{item_query[4]}```", inline=False)
+    f2 = interactions.EmbedField(name="Prowincje ze złożami",
+                                 value=f"```ansi"
+                                       f"\n\u001b[0;30m#53  \u001b[0;37mTestowa Prowincja\u001b[0;0m"
+                                       f"\n\u001b[0;30m#58  \u001b[0;37mKontantinolopolis\u001b[0;0m"
+                                       f"\n"
+                                       f"\n‎```", inline=True)
+    f3 = interactions.EmbedField(name="Ekonomia",
+                                 value=f"```ansi"
+                                       f"\nZasoby:   \u001b[0;37m       273\u001b[0;0m"
+                                       f"\nPrzychód: \u001b[0;32m      +32\u001b[0;0m"
+                                       f"\nDeficyt:  \u001b[0;31m      -20\u001b[0;0m"
+                                       f"\nBalans:   \u001b[0;33m      +12\u001b[0;0m```",
+                                 inline=True)
+    f4 = interactions.EmbedField(name="Budynki", value=f"```Test Opsem Lirum Lelum Palelum Sinco Sia```", inline=False)
+    # Building the Embed
+    embed = interactions.Embed(
+        color=int(item_query[2], 16),
+        title=f"{item_query[1]} #{item_query[0]}",
+        # description=result_countries[5],
+        thumbnail=embed_thumbnail,
+        author=embed_author,
+        fields=[f1, f2, f3, f4]
+    )
+    return embed
+
+
+async def build_item_embed_talar(ctx, self):
+    user = await interactions.get(self.bot, interactions.User, object_id=ctx.author.id)
+    embed_thumbnail = interactions.EmbedImageStruct(
+        url="https://i.imgur.com/4MFkrcH.png"
+    )
+    embed_author = interactions.EmbedAuthor(
+        name=user.username + "#" + user.discriminator,
+        icon_url=user.avatar_url
+    )
+    f1 = interactions.EmbedField(name="Co ty tutaj kurwa robisz?",
+                                 value=f"```Siedzę cicho, nie rzucam się w oczy i wypełniam swoje zadanie jako "
+                                       f"item testowy. Więc jeśli nic więcej nie potrzebujesz, to wypierdalaj.```",
+                                 inline=False)
+    # Building the Embed
+    embed = interactions.Embed(
+        color=int("000000", 16),
+        title=f"Talar #1",
+        thumbnail=embed_thumbnail,
+        author=embed_author,
+        fields=[f1]
+    )
+    meme = ("https://i.imgur.com/vv5uOH4.png", "https://i.imgur.com/PI9TTwZ.png", "https://i.imgur.com/KJFCoNA.png"
+            "https://i.imgur.com/yV4QfJM.png", "https://i.imgur.com/Rr7Ko4w.png", "https://i.imgur.com/L2DNU9a.png")
+    embed.set_image(url=random.choice(meme))
+    return embed
+
+
+async def build_item_embed_talary(ctx, self, item_id: int, country_id: int, item_query: list):
+    province_query = db.pax_engine.connect().execute(text(
+        f'SELECT item_id, item_name, item_color, item_image_url, item_desc, quantity, item_good '
+        f'FROM items NATURAL JOIN inventories '
+        f'WHERE item_id = "{item_id}" AND country_id = "{country_id}"'
+    )).fetchone()
+    user = await interactions.get(self.bot, interactions.User, object_id=ctx.author.id)
+    embed_thumbnail = interactions.EmbedImageStruct(
+        url=item_query[3]
+    )
+    embed_author = interactions.EmbedAuthor(
+        name=user.username + "#" + user.discriminator,
+        icon_url=user.avatar_url
+    )
+    f1 = interactions.EmbedField(name="Opis", value=f"```{item_query[4]}```", inline=False)
+    f2 = interactions.EmbedField(name="Oddziały",
+                                 value=f"```ansi"
+                                       f"\n\u001b[0;37mArmia:          \u001b[0;0m\u001b[0;31m-973"
+                                       f"\n\u001b[0;37mBudynki:        \u001b[0;0m\u001b[0;31m-234"
+                                       f"\n\u001b[0;37mManufaktury:    \u001b[0;0m\u001b[0;32m+663"
+                                       f"\n\u001b[0;37mPodatki:        \u001b[0;0m\u001b[0;32m+1452"
+                                       f"```", inline=True)
+    f3 = interactions.EmbedField(name="Ekonomia",
+                                 value=f"```ansi"
+                                       f"\nZasoby:   \u001b[0;37m       7973\u001b[0;0m"
+                                       f"\nPrzychód: \u001b[0;32m      +2115\u001b[0;0m"
+                                       f"\nDeficyt:  \u001b[0;31m      -1207\u001b[0;0m"
+                                       f"\nBalans:   \u001b[0;33m      +908\u001b[0;0m```",
+                                 inline=True)
+    # Building the Embed
+    embed = interactions.Embed(
+        color=int(item_query[2], 16),
+        title=f"{item_query[1]} #{item_query[0]}",
+        # description=result_countries[5],
+        thumbnail=embed_thumbnail,
+        author=embed_author,
+        fields=[f1, f2, f3]
+    )
+    return embed
+
+
+async def build_item_embed(ctx, self, item_id: int, country_id: int):
+    print(item_id, country_id)
+    # Get all info from database
+    item_query = db.pax_engine.connect().execute(text(
+        f'SELECT item_id, item_name, item_color, item_image_url, item_desc, quantity, item_good '
+        f'FROM items NATURAL JOIN inventories '
+        f'WHERE item_id = "{item_id}" AND country_id = "{country_id}"'
+    )).fetchone()
+    if item_query[5] <= 0:  # Redundant check for quantity
+        return
+    if item_query[6] == 1:  # Get info for items that are also goods on the map
+        embed = await build_item_embed_good(ctx, self, item_id, country_id, item_query)
+    else:  # Get info for items that are NOT goods on the map
+        match item_query[0]:
+            case 1:  # Talar
+                embed = await build_item_embed_talar(ctx, self)
+            case 2:  # Talary
+                embed = await build_item_embed_talary(ctx, self, item_id, country_id, item_query)
+            case _:
+                embed = await build_item_embed_good(ctx, self, item_id, country_id, item_query)
+    print(item_query)
+    return embed
+
+
+async def build_item_embed_admin(item_id: int):
+    connection = db.pax_engine.connect()
+    query = connection.execute(text(
+        f'SELECT * FROM items WHERE item_id = "{item_id}"'
+    )).fetchall()
+    query = list(query[0])
+    # Creating embed elements
+    embed_thumbnail = interactions.EmbedImageStruct(
+        url=query[4]
+    )
+    f1 = interactions.EmbedField(name="Opis", value=f"```{query[2]}```", inline=True)
+
+    # Building the Embed
+    embed = interactions.Embed(
+        color=int(query[5], 16),
+        title=query[1],
+        # description=result_countries[5],
+        thumbnail=embed_thumbnail,
+        fields=[f1]
+    )
+    connection.close()
+    return embed
+
+
+# /commands
 author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
                                   icon_url="https://i.imgur.com/4MFkrcH.png")
 fb = interactions.EmbedField(name="", value="", inline=False)
@@ -76,6 +298,7 @@ def commands():
     return embed
 
 
+# /info command
 def ic_tutorial():
     f1 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/tutorial\u001b[0;0m```"
@@ -223,7 +446,7 @@ def ic_inventory_list():
     return embed
 
 
-def ic_inventory_items():
+def ic_inventory_item():
     f1 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/inventory item\u001b[0;0m```"
                                        f"\nWyświetla informacje o itemach.", inline=False)
@@ -502,8 +725,8 @@ def ic_army_rename():
                                        f"\nZmienia nazwę armii 'Pierwsza Chorągiew' na 'Chorągiew Cara'."
                                        f"```ansi\n\u001b[0;40m/army rename [Jednostka] [13] "
                                        f"[Gwardia Cara] \u001b[0;0m```"
-                                       f"\nZmienia nazwę jednostki #13 na 'Gwardia Cara'."
-                                 , inline=False)
+                                       f"\nZmienia nazwę jednostki #13 na 'Gwardia Cara'.",
+                                 inline=False)
     embed = interactions.Embed(
         title="/army rename [typ] [nazwa] [nowa_nazwa] {admin}",
         description="Zmienia nazwę jednostki lub armii państwa.\n"
@@ -712,11 +935,11 @@ def ic_province_rename():
                                                            f"\n\u001b[0;32m•# prowincji\u001b[0;0m"
                                                            f"\nZmienia nazwę prowincji o danym ID."
                                                            f"\n\u001b[0;32m•Nazwa prowincji\u001b[0;0m"
-                                                           f"\nZmienia nazwę prowincji o danej nazwie.",
+                                                           f"\nZmienia nazwę prowincji o danej nazwie.```",
                                  inline=True)
     f2 = interactions.EmbedField(name="[nowa_nazwa]", value=f"```ansi"
                                                             f"\n\u001b[0;33m•Nowa nazwa\u001b[0;0m"
-                                                            f"\nNadaje nową nazwę prowincji.",
+                                                            f"\nNadaje nową nazwę prowincji.```",
                                  inline=True)
     f3 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
                                                        f"\n\u001b[0;35m•@ gracza\u001b[0;0m"
@@ -725,11 +948,9 @@ def ic_province_rename():
                                                        f"\nZmienia nazwę prowincji danemu krajowi.```",
                                  inline=True)
     f4 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/province rename [Kanonia] "
-                                       f"[Skalla] \u001b[0;0m```"
+                                 value=f"```ansi\n\u001b[0;40m/province rename [Kanonia] [Skalla] \u001b[0;0m```"
                                        f"\nZmienia nazwę prowincji 'Kanonia' na 'Skalla'."
-                                       f"```ansi\n\u001b[0;40m/province rename [53] "
-                                       f"[Skalla] \u001b[0;0m```"
+                                       f"```ansi\n\u001b[0;40m/province rename [53] [Skalla] \u001b[0;0m```"
                                        f"\nZmienia nazwę prowincji #53 na 'Skalla'.",
                                  inline=False)
     embed = interactions.Embed(

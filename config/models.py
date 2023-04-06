@@ -1,8 +1,112 @@
 import random
-
+import pandas as pd
 import interactions
 from database import *
 from sqlalchemy import text
+from interactions.ext.paginator import Page
+
+
+# Pagify a table string
+async def pagify(dataframe: list):
+    bit = ''
+    bits = []
+    for line in dataframe:
+        if len(bit) > 1860:
+            bits.append(bit)
+            bit = ''
+        bit = f"{bit}\n{line}"
+    pages = []
+    for i, bit in enumerate(bits):
+        pages.append(Page(title=str(i+1) + ". Strona", content=f"```ansi\n{bit}```"))
+    return pages
+
+
+# /province list
+async def build_province_list(country_id: int):
+    connection = db.pax_engine.connect()
+    table = connection.execute(text(
+        f"SELECT province_name, province_id, region_name, terrain_name, good_name, religion_name, province_pops, "
+        f"province_autonomy FROM provinces NATURAL JOIN regions NATURAL JOIN goods NATURAL JOIN terrains "
+        f"NATURAL JOIN religions "
+        f"WHERE country_id = {country_id} OR controller_id = {country_id}")).fetchall()
+
+    df = pd.DataFrame(table, columns=[
+        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Populacja', 'Autonomia'])
+    df = df.sort_values(by=['ID'])
+    for i, row in df.iterrows():
+        df.at[i, 'ID'] = f"\u001b[0;30m ({df['ID'][i]})\u001b[0;0m"
+        if df['Autonomia'][i] > 67:
+            autonomia = f"\u001b[0;31m{df['Autonomia'][i]}%\u001b[0;0m"
+        elif df['Autonomia'][i] < 33:
+            autonomia = f"\u001b[0;32m{df['Autonomia'][i]}%\u001b[0;0m"
+        else:
+            autonomia = f"\u001b[0;33m{df['Autonomia'][i]}%\u001b[0;0m"
+        df.at[i, 'Autonomia'] = autonomia
+    combined = df['Prowincja'] + df['ID']
+    df.drop(['Prowincja', 'ID'], axis=1, inplace=True)
+    df.insert(0, 'Prowincja (ID)', combined)
+    return df
+
+
+async def build_province_list_admin():
+    connection = db.pax_engine.connect()
+    table = connection.execute(text(
+        f"SELECT province_name, province_id, region_name, terrain_name, good_name, religion_name, province_pops, "
+        f"province_autonomy FROM provinces NATURAL JOIN regions NATURAL JOIN goods NATURAL JOIN terrains "
+        f"NATURAL JOIN religions")).fetchall()
+
+    df = pd.DataFrame(table, columns=[
+        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Populacja', 'Autonomia'])
+    df = df.sort_values(by=['ID'])
+    for i, row in df.iterrows():
+        df.at[i, 'ID'] = f"\u001b[0;30m ({df['ID'][i]})\u001b[0;0m"
+        if df['Autonomia'][i] > 67:
+            autonomia = f"\u001b[0;31m{df['Autonomia'][i]}%\u001b[0;0m"
+        elif df['Autonomia'][i] < 33:
+            autonomia = f"\u001b[0;32m{df['Autonomia'][i]}%\u001b[0;0m"
+        else:
+            autonomia = f"\u001b[0;33m{df['Autonomia'][i]}%\u001b[0;0m"
+        df.at[i, 'Autonomia'] = autonomia
+    combined = df['Prowincja'] + df['ID']
+    df.drop(['Prowincja', 'ID'], axis=1, inplace=True)
+    df.insert(0, 'Prowincja (ID)', combined)
+    return df
+
+
+async def build_province_embed(province_id: int):
+    connection = db.pax_engine.connect()
+    query = connection.execute(text(
+        f'SELECT * FROM provinces NATURAL JOIN countries NATURAL JOIN religions WHERE province_id = "{province_id}"'
+    )).fetchall()
+    # Repairing names for multiple players on one country
+    #query = list(query[0])
+    #query2 = connection.execute(text(
+    #    f'SELECT SUM(province_pops), COUNT(*) FROM provinces WHERE country_id = "{country_id}"')).fetchone()
+    ## Creating embed elements
+    #embed_footer = interactions.EmbedFooter(
+    #    text=query[13],
+    #    icon_url=query[14]
+    #)
+    #embed_thumbnail = interactions.EmbedImageStruct(
+    #    url=query[12]
+    #)
+    #embed_author = interactions.EmbedAuthor(
+    #    name=query[3],
+    #)
+
+    # Building the Embed
+    embed = interactions.Embed(
+        #color=int(query[7], 16),
+        title=str(province_id),
+        # description=result_countries[5],
+        #url=query[11],
+        #footer=embed_footer,
+        #thumbnail=embed_thumbnail,
+        #author=embed_author,
+        #fields=[f1, f2, fb, f3, f4, fb, f5, f6, fb, f7, f8]
+    )
+    connection.close()
+    return embed
 
 
 # /info country

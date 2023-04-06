@@ -4,11 +4,12 @@ __all__ = [
     #'army',
     #'template',
     #'debug',
-    #'dbdebug',
+    'dbdebug',
     #'turntools',
     'map',
     'info',
     'inventory',
     'commands',
-    'admin'
+    'admin',
+    'province'
 ]

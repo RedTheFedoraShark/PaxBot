@@ -740,3 +740,31 @@ def ic_province_rename():
         fields=[f1, f2, fb, f3, f4]
     )
     return embed
+
+
+"""
+Guess I will just sneak in with my own code here too - red
+"""
+def bt_list():
+    f1 = interactions.EmbedField(
+        name="Budynki",
+        value=f"```asni"
+              f""
+              f""
+              f""
+              f""
+              f""
+              f""
+              f""
+              f""
+              f""
+              f""
+              f""
+              f""
+              f""
+              f""
+              f""
+              f""
+    )
+    embed = None
+    return embed

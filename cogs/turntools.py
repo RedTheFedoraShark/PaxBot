@@ -1,6 +1,9 @@
+import dbm
+
 import interactions
 from prototype import defdump
-
+from database import *
+from sqlalchemy import text
 # all class names from this file have to be included in __all__ array
 __all__ = ['TurnTools']
 
@@ -10,9 +13,6 @@ class TurnTools(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    async def income(self):
-        pass
-
     async def migration(self):
         pass
 
@@ -21,10 +21,15 @@ class TurnTools(interactions.Extension):
 
     @interactions.extension_command()
     async def next_turn(self, ctx):
-        pass
+        await ctx.defer()
+        # unload cogs so that players can't interrupt the calculations
         await defdump.unload_cogs(self.bot)
-        """
-        Rest of code in here
-        """
+
+        connection = db.pax_engine
+
+
+
+        connection.close()
+
         await defdump.load_cogs(self.bot)
 

@@ -15,7 +15,8 @@ class Debug(interactions.Extension):
 
     @interactions.extension_command(
         name="kill",
-        description="Turn off the bot"
+        description="Turn off the bot",
+        scope='917078941213261914'
     )
     async def kill(self, ctx):
         if self.bot.me.owner.id == ctx.author.id:
@@ -33,23 +34,28 @@ class Debug(interactions.Extension):
             return
         return
 
+    @interactions.extension_command(
+        scope='917078941213261914'
+    )
+    async def add(self, ctx: interactions.CommandContext):
+        pass
 
+    @add.subcommand(
+    )
+    async def template(self, ctx: interactions.CommandContext):
+        pass
 
+    @add.subcommand(
+    )
+    async def building(self, ctx: interactions.CommandContext):
+        pass
 
-    """
-    parentPath = path.abspath(path.dirname(path.curdir))
-    with open(path.join(parentPath, "config/config.json")) as f:
-        self.owner = int(json.load(f)['Owner'])
-            
-    @commands.command()
-    async def reconnect(self, ctx):
-        if ctx.author.guild_permissions.administrator:
+    @add.subcommand(
+    )
+    async def tradegood(self, ctx: interactions.CommandContext):
+        pass
 
-            await ctx.send("Reconnecting...")
-            print("Reconnecting...")
-            await self.bot.connect()
-        else:
-            print("Unauthorized access attempt from {0}.".format(ctx.author.id))
-            return
-        return
-    """
+    @add.subcommand(
+    )
+    async def item(self, ctx: interactions.CommandContext):
+        pass

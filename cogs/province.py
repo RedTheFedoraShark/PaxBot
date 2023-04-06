@@ -2,6 +2,7 @@ import interactions
 from database import *
 from sqlalchemy import text
 
+
 # all class names from this file have to be included in def below
 def setup(bot):
     Province(bot)
@@ -55,31 +56,3 @@ class Province(interactions.Extension):
 
         connection.close()
         return
-
-    @province.subcommand(description='a')
-    @interactions.option(name='proivnce', description='Nazwa lub id prowincji.')
-    async def details(self, ctx: interactions.CommandContext, province: str):
-
-        self.bot.defer()
-        connection = db.pax_engine.connect()
-
-
-
-        result = connection.execute(
-            text(f'SELECT province_id, province_name, region_name, terrain_name, good_name, '
-                 f'religion_name, country_name, province_pops, province_pops_used, province_autonomy '
-                 f'FROM provinces '
-                 f'NATURAL JOIN terrains '
-                 f'NATURAL JOIN goods '
-                 f'NATURAL JOIN regions '
-                 f'NATURAL JOIN religions'
-                 f'NATURAL JOIN countries'
-                 f'WHERE country_id = 1'))
-
-
-        connection.close()
-        return
-
-    @province.subcommand(description='a')
-    async def give(self, ctx: interactions.CommandContext):
-        pass

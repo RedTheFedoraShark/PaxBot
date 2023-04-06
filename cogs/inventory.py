@@ -1,6 +1,8 @@
 import interactions
 from database import *
 from sqlalchemy import text
+from config import models
+from interactions.ext.paginator import Page, Paginator
 
 
 # all class names from this file have to be included in def below
@@ -77,6 +79,85 @@ class Inventory(interactions.Extension):
 
         connection.close()
         return
+
+
+    @inventory.subcommand(name='item', description="Informacje o itemach które posiadasz.")
+    @interactions.option(name='item', description='O jakim itemie wyświetlić informacje?', autocomplete=True)
+    @interactions.option(name='admin', description='Jesteś admin?.')
+    async def item(self, ctx: interactions.CommandContext, item: str, admin: str = ''):
+        country_id = db.pax_engine.connect().execute(text(
+            f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {ctx.author.id}')).fetchone()
+
+        if admin == "admin" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            admin = True
+            query = db.pax_engine.connect().execute(text(f'SELECT item_id, item_name FROM items')).fetchall()
+        else:
+            admin = False
+            query = db.pax_engine.connect().execute(text(
+                f'SELECT item_id, item_name FROM  countries NATURAL JOIN inventories NATURAL JOIN items '
+                f'WHERE country_id = {country_id[0]} AND NOT quantity <= 0')).fetchall()
+
+        index = 0
+        for i, row in enumerate(query):
+            if str.lower(row[1]) == str.lower(item):
+                index = i
+        single_list = []
+        for row in query:
+            single_list.append(row[0])
+
+        if admin:
+            pages = []
+            for item_id in single_list:
+                embed = await models.build_item_embed_admin(item_id)
+                pages.append(Page(embeds=embed))
+            await Paginator(
+                client=self.bot,
+                ctx=ctx,
+                author_only=True,
+                timeout=300,
+                message="test",
+                use_index=True,
+                index=index,
+                pages=pages
+            ).run()
+        else:
+            match len(single_list):
+                case 0:
+                    await ctx.send("Nie masz nic w ekwipunku!")
+                case 1:
+                    embed = await models.build_item_embed(ctx, self, single_list[0], country_id[0])
+                    await ctx.send(embeds=embed)
+                case _:
+                    pages = []
+                    for item_id in single_list:
+                        embed = await models.build_item_embed(ctx, self, item_id, country_id[0])
+                        pages.append(Page(embeds=embed))
+                    await Paginator(
+                        client=self.bot,
+                        ctx=ctx,
+                        author_only=True,
+                        timeout=300,
+                        message="test",
+                        index=index,
+                        pages=pages
+                    ).run()
+
+    @interactions.extension_autocomplete(command='inventory', name='item')
+    async def item_autocomplete(self, ctx: interactions.CommandContext, item: str = ""):
+        items = db.pax_engine.connect().execute(text(
+                f'SELECT item_name FROM players NATURAL JOIN countries NATURAL JOIN inventories NATURAL JOIN items '
+                f'WHERE player_id = "{ctx.author.id}" AND quantity > 0')).fetchall()
+        if item == "":
+            choices = [
+                interactions.Choice(name=item_name[0], value=item_name[0])
+                for item_name in items
+            ]
+        else:
+            choices = [
+                interactions.Choice(name=item_name[0], value=item_name[0])
+                for item_name in items if str.lower(item) in str.lower(item_name[0])
+            ]
+        await ctx.populate(choices)
 
 
     @inventory.subcommand(description='Przekaż coś innemu graczu.')

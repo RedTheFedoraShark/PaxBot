@@ -71,43 +71,71 @@ class Province(interactions.Extension):
                                   interactions.Choice(name="Prosty", value="list")])
     @interactions.option(name='admin', description='Jesteś admin?')
     async def list(self, ctx: interactions.CommandContext, tryb: str, admin: str = ''):
+        # God forgive me for what I have done with this code.
+        country_id = False
+        index = 0
         if admin != "" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            admin_bool = True
             if admin.startswith('<@') and admin.endswith('>'):  # if a ping
                 country_id = db.pax_engine.connect().execute(text(
                     f'SELECT country_id FROM players NATURAL JOIN countries '
                     f'WHERE player_id = {admin[2:-1]}')).fetchone()
-            else:
-                if tryb == "pages":
-                    return
-                else:
-                    df = await models.build_province_list_admin()
-                    if len(df.to_markdown(index=False)) < 1990:
-                        await ctx.send(f"```ansi\n{df.to_markdown(index=False)}```")
-                    else:
-                        df = df.to_markdown(index=False).split("\n")
-                        pages = await models.pagify(df)
-
-                        await Paginator(
-                            client=self.bot,
-                            ctx=ctx,
-                            author_only=True,
-                            timeout=600,
-                            message="test",
-                            pages=pages
-                        ).run()
+            elif admin.startswith('#'):
+                index = int(admin[1:]) - 1
         else:
-            if tryb == "pages":
+            admin_bool = False
+
+        if tryb == "pages":
+            if admin_bool:
+                if country_id:
+                    province_ids = db.pax_engine.connect().execute(text(
+                        f'SELECT province_id FROM players NATURAL JOIN countries NATURAL JOIN provinces '
+                        f'WHERE country_id = {country_id[0]}')).fetchall()
+                else:
+                    province_ids = list((x, ) for x in range(1, 322))
+            else:
                 province_ids = db.pax_engine.connect().execute(text(
                     f'SELECT province_id FROM players NATURAL JOIN countries NATURAL JOIN provinces '
                     f'WHERE player_id = {ctx.author.id}')).fetchall()
-                non_dup_ids = set()
-                for x in province_ids:
-                    non_dup_ids.add(x[0])
-                non_dup_ids = sorted(non_dup_ids)
-                pages = []
-                for x in non_dup_ids:
-                    page = await models.build_province_embed(x)
-                    pages.append(Page(embeds=page))
+            non_dup_ids = set()
+            for x in province_ids:
+                non_dup_ids.add(x[0])
+            non_dup_ids = sorted(non_dup_ids)
+            pages = []
+            for x in non_dup_ids:
+                page = await models.build_province_embed(x)
+                pages.append(Page(embeds=page))
+            if len(pages) > 25:
+                use = True
+            else:
+                use = False
+            await Paginator(
+                client=self.bot,
+                ctx=ctx,
+                author_only=True,
+                timeout=600,
+                use_index=use,
+                index=index,
+                message="test",
+                pages=pages
+            ).run()
+        else:
+            if admin_bool:
+                if country_id:
+                    df = await models.build_province_list(country_id[0])
+                else:
+                    df = await models.build_province_list_admin()
+            else:
+                country_id = db.pax_engine.connect().execute(text(
+                    f'SELECT country_id FROM players NATURAL JOIN countries '
+                    f'WHERE player_id = {ctx.author.id}')).fetchone()
+                df = await models.build_province_list(country_id[0])
+            if len(df.to_markdown(index=False)) < 1990:
+                await ctx.send(f"```ansi\n{df.to_markdown(index=False)}```")
+            else:
+                df = df.to_markdown(index=False).split("\n")
+                pages = await models.pagify(df)
+
                 await Paginator(
                     client=self.bot,
                     ctx=ctx,
@@ -116,26 +144,6 @@ class Province(interactions.Extension):
                     message="test",
                     pages=pages
                 ).run()
-            else:
-                country_id = db.pax_engine.connect().execute(text(
-                    f'SELECT country_id FROM players NATURAL JOIN countries '
-                    f'WHERE player_id = {admin[2:-1]}')).fetchone()
-                df = await models.build_province_list(country_id[0])
-                if len(df.to_markdown(index=False)) < 1990:
-                    await ctx.send(f"```ansi\n{df.to_markdown(index=False)}```")
-                else:
-                    df = df.to_markdown(index=False).split("\n")
-                    pages = await models.pagify(df)
-
-                    await Paginator(
-                        client=self.bot,
-                        ctx=ctx,
-                        author_only=True,
-                        timeout=600,
-                        message="test",
-                        pages=pages
-                    ).run()
-
 
     """
     @interactions.extension_command(description='dummy')

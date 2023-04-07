@@ -119,23 +119,27 @@ class Map(interactions.Extension):
                 title = "Mapa Zasobów"
             case "countries":
                 final_image = Image(filename="gfx/maps/provinces.png")
+                mask = Image(filename="gfx/maps/occupation.png")
                 fi = final_image.clone()
-                final_table = []
+                fi2 = final_image.clone()
+                msk = mask.clone()
                 result = db.pax_engine.connect().execute(text(
-                    "SELECT pixel_capital_x, pixel_capital_y, country_id FROM provinces"))
-                table = result.fetchall()
-                result = db.pax_engine.connect().execute(text(
-                    "SELECT country_color, country_id FROM countries"))
-                table2 = result.fetchall()
-                table2 = np.array(table2)
-                for row in table:
-                    index = np.where(table2 == np.str_(row[2]))
-                    final = row[0], row[1], table2[index[0][0]][0]
-                    final_table.append(final)
+                    "SELECT pixel_capital_x, pixel_capital_y, country_color "
+                    "FROM provinces LEFT JOIN countries ON provinces.country_id=countries.country_id")).fetchall()
+                result2 = db.pax_engine.connect().execute(text(
+                    "SELECT pixel_capital_x, pixel_capital_y, country_color "
+                    "FROM provinces LEFT JOIN countries ON provinces.controller_id=countries.country_id")).fetchall()
                 with Drawing() as draw:
-                    for row in final_table:
+                    for row in result2:
                         draw.fill_color = Color(f'#{row[2]}')
                         draw.color(row[0], row[1], 'replace')
+                    draw(fi2)
+                fi2.composite_channel("alpha", mask, "copy_opacity", 0, 0)
+                with Drawing() as draw:
+                    for row in result:
+                        draw.fill_color = Color(f'#{row[2]}')
+                        draw.color(row[0], row[1], 'replace')
+                    draw.composite(operator="atop", left=0, top=0, width=fi2.width, height=fi2.height, image=fi2)
                     draw(fi)
                 title = "Mapa Polityczna"
             case "religions":
@@ -236,27 +240,29 @@ class Map(interactions.Extension):
                 title = f"{title}, z ID prowincji."
             case "province_name":
                 fi.scale(3256, 3256)
+                f_size = 20
+                off = int(f_size/2)
                 table = db.pax_engine.connect().execute(text(
                     "SELECT province_name, pixel_capital_x, pixel_capital_y FROM provinces"))
                 final_table = table.fetchall()
                 with Drawing() as draw:
                     draw.font = 'Times New Roman'
-                    draw.font_size = 20
+                    draw.font_size = f_size
                     draw.stroke_color = Color('black')
                     draw.stroke_width = 2
                     draw.text_alignment = 'center'
                     for row in final_table:
                         province_text = row[0].replace(' ', '\n')
-                        draw.text(row[1]*2, row[2]*2, f"{province_text}")
+                        draw.text(row[1]*2+off, row[2]*2, f"{province_text}")
                     draw(fi)
                 with Drawing() as draw:
                     draw.font = 'Times New Roman'
-                    draw.font_size = 20
+                    draw.font_size = f_size
                     draw.fill_color = Color('white')
                     draw.text_alignment = 'center'
                     for row in final_table:
                         province_text = row[0].replace(' ', '\n')
-                        draw.text(row[1]*2, row[2]*2, f"{province_text}")
+                        draw.text(row[1]*2+off, row[2]*2, f"{province_text}")
                     draw(fi)
                 title = f"{title}, z nazwami prowincji."
             case "region_name":

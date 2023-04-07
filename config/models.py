@@ -31,7 +31,7 @@ async def build_province_list(country_id: int):
         f"WHERE country_id = {country_id} OR controller_id = {country_id}")).fetchall()
 
     df = pd.DataFrame(table, columns=[
-        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Populacja', 'Autonomia'])
+        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Autonomia'])
     df = df.sort_values(by=['ID'])
     for i, row in df.iterrows():
         df.at[i, 'ID'] = f"\u001b[0;30m ({df['ID'][i]})\u001b[0;0m"
@@ -56,7 +56,7 @@ async def build_province_list_admin():
         f"NATURAL JOIN religions")).fetchall()
 
     df = pd.DataFrame(table, columns=[
-        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Populacja', 'Autonomia'])
+        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Autonomia'])
     df = df.sort_values(by=['ID'])
     for i, row in df.iterrows():
         df.at[i, 'ID'] = f"\u001b[0;30m ({df['ID'][i]})\u001b[0;0m"
@@ -278,7 +278,6 @@ async def build_item_embed_talary(ctx, self, item_id: int, country_id: int, item
 
 
 async def build_item_embed(ctx, self, item_id: int, country_id: int):
-    print(item_id, country_id)
     # Get all info from database
     item_query = db.pax_engine.connect().execute(text(
         f'SELECT item_id, item_name, item_color, item_image_url, item_desc, quantity, item_good '
@@ -297,7 +296,6 @@ async def build_item_embed(ctx, self, item_id: int, country_id: int):
                 embed = await build_item_embed_talary(ctx, self, item_id, country_id, item_query)
             case _:
                 embed = await build_item_embed_good(ctx, self, item_id, country_id, item_query)
-    print(item_query)
     return embed
 
 

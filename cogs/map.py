@@ -8,6 +8,7 @@ from wand.color import Color
 from sqlalchemy import text
 from database import *
 import json
+import asyncio
 
 with open("./config/config.json") as f:
     config = json.load(f)
@@ -105,7 +106,6 @@ class Map(interactions.Extension):
                     admin_bool = True
                 with Drawing() as draw:
                     for row in result:
-                        print(row[3], author_id)
                         if row[3] == author_id[0] or admin_bool:
                             draw.fill_color = Color(f'#{row[2]}')
                             draw.color(row[0], row[1], 'replace')
@@ -118,40 +118,57 @@ class Map(interactions.Extension):
                     draw(fi)
                 title = "Mapa Zasobów"
             case "countries":
-                final_image = Image(filename="gfx/maps/provinces.png")
-                mask = Image(filename="gfx/maps/occupation.png")
+                final_image = Image(filename="gfx/maps/provinces_only.png")
+                cropped = Image(filename="gfx/maps/provinces_cropped.png")
+                mask = Image(filename="gfx/maps/occupation_cropped.png")
                 fi = final_image.clone()
-                fi2 = final_image.clone()
-                msk = mask.clone()
+                cr = cropped.clone()
                 result = db.pax_engine.connect().execute(text(
                     "SELECT pixel_capital_x, pixel_capital_y, country_color "
-                    "FROM provinces LEFT JOIN countries ON provinces.country_id=countries.country_id")).fetchall()
+                    "FROM provinces LEFT JOIN countries ON provinces.country_id=countries.country_id "
+                    "WHERE province_id NOT BETWEEN 251 AND 321")).fetchall()
                 result2 = db.pax_engine.connect().execute(text(
                     "SELECT pixel_capital_x, pixel_capital_y, country_color "
-                    "FROM provinces LEFT JOIN countries ON provinces.controller_id=countries.country_id")).fetchall()
+                    "FROM provinces LEFT JOIN countries ON provinces.controller_id=countries.country_id "
+                    "WHERE province_id NOT BETWEEN 251 AND 321")).fetchall()
                 with Drawing() as draw:
                     for row in result2:
                         draw.fill_color = Color(f'#{row[2]}')
                         draw.color(row[0], row[1], 'replace')
-                    draw(fi2)
-                fi2.composite_channel("alpha", mask, "copy_opacity", 0, 0)
+                    draw(cr)
+                cr.composite_channel("alpha", mask, "copy_opacity", 0, 0)
                 with Drawing() as draw:
                     for row in result:
                         draw.fill_color = Color(f'#{row[2]}')
                         draw.color(row[0], row[1], 'replace')
-                    draw.composite(operator="atop", left=0, top=0, width=fi2.width, height=fi2.height, image=fi2)
+                    draw.composite(operator="atop", left=0, top=0, width=cr.width, height=cr.height, image=cr)
                     draw(fi)
                 title = "Mapa Polityczna"
             case "religions":
-                final_image = Image(filename="gfx/maps/provinces.png")
+                final_image = Image(filename="gfx/maps/provinces_only.png")
+                cropped = Image(filename="gfx/maps/provinces_cropped.png")
+                mask = Image(filename="gfx/maps/occupation_cropped.png")
                 fi = final_image.clone()
+                cr = cropped.clone()
                 result = db.pax_engine.connect().execute(text(
-                    "SELECT pixel_capital_x, pixel_capital_y, religion_color FROM provinces NATURAL JOIN religions"))
-                final_table = result.fetchall()
+                    "SELECT pixel_capital_x, pixel_capital_y, religion_color FROM provinces NATURAL JOIN religions "
+                    "WHERE province_id NOT BETWEEN 251 AND 321")).fetchall()
+                result2 = db.pax_engine.connect().execute(text(
+                    "SELECT pixel_capital_x, pixel_capital_y, religion_color "
+                    "FROM provinces LEFT JOIN countries ON provinces.controller_id=countries.country_id "
+                    "LEFT JOIN religions ON countries.religion_id = religions.religion_id "
+                    "WHERE province_id NOT BETWEEN 251 AND 321")).fetchall()
                 with Drawing() as draw:
-                    for row in final_table:
+                    for row in result2:
                         draw.fill_color = Color(f'#{row[2]}')
                         draw.color(row[0], row[1], 'replace')
+                    draw(cr)
+                cr.composite_channel("alpha", mask, "copy_opacity", 0, 0)
+                with Drawing() as draw:
+                    for row in result:
+                        draw.fill_color = Color(f'#{row[2]}')
+                        draw.color(row[0], row[1], 'replace')
+                    draw.composite(operator="atop", left=0, top=0, width=cr.width, height=cr.height, image=cr)
                     draw(fi)
                 title = "Mapa Religii"
             case "pops":
@@ -253,7 +270,7 @@ class Map(interactions.Extension):
                     draw.text_alignment = 'center'
                     for row in final_table:
                         province_text = row[0].replace(' ', '\n')
-                        draw.text(row[1]*2+off, row[2]*2, f"{province_text}")
+                        draw.text(row[1]*2, row[2]*2+off, f"{province_text}")
                     draw(fi)
                 with Drawing() as draw:
                     draw.font = 'Times New Roman'
@@ -262,7 +279,7 @@ class Map(interactions.Extension):
                     draw.text_alignment = 'center'
                     for row in final_table:
                         province_text = row[0].replace(' ', '\n')
-                        draw.text(row[1]*2+off, row[2]*2, f"{province_text}")
+                        draw.text(row[1]*2, row[2]*2+off, f"{province_text}")
                     draw(fi)
                 title = f"{title}, z nazwami prowincji."
             case "region_name":

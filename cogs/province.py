@@ -82,6 +82,10 @@ class Province(interactions.Extension):
                     f'WHERE player_id = {admin[2:-1]}')).fetchone()
             elif admin.startswith('#'):
                 index = int(admin[1:]) - 1
+            else:
+                country_id = db.pax_engine.connect().execute(text(
+                    f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{admin}"'
+                )).fetchone()
         else:
             admin_bool = False
 
@@ -144,6 +148,19 @@ class Province(interactions.Extension):
                     message="test",
                     pages=pages
                 ).run()
+
+    @province.subcommand(description="Lista prowincji twojego państwa.")
+    @interactions.option(name='prowincja', description='#ID albo obecna nazwa prowincji.')
+    @interactions.option(name='nowa_nazwa', description='Nowa nazwa prowincji do 17 znaków.')
+    @interactions.option(name='admin', description='Jesteś admin?')
+    async def rename(self, ctx: interactions.CommandContext, prowincja: str, nowa_nazwa: str, admin: str = ''):
+        await ctx.defer()
+        # Don't read this either.
+        if admin != "" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            admin_bool = True
+        else:
+            admin_bool = False
+        await ctx.send("Test")
 
     """
     @interactions.extension_command(description='dummy')

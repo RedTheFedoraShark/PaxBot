@@ -38,13 +38,19 @@ async def on_ready():
 @bot.event
 async def on_command(ctx: interactions.CommandContext):
     options = f'{ctx.data.options[0].name}, {[f"{o.name}:{o.value}" for o in ctx.data.options[0].options]}'
+    if ctx.data.options[0].name is not None:
+        subcommand = ctx.data.options[0].name
+    if ctx.data.options[0].options is not None:
+        for o in ctx.data.options[0].options:
+            options += f'{o.name}:{o.value}, '
+
     print(timestamp() +
           Colorful.CVIOLET + str(ctx.author.name) +
           "[" + str(ctx.author.id) + "] " +
           Colorful.CBLUE + "called " +
-          Colorful.CVIOLET + str(ctx.data.name) +
+          Colorful.CVIOLET + f'{ctx.data.name} {subcommand}' +
           Colorful.CBLUE + " with options: " +
-          Colorful.CVIOLET + str(options) +
+          Colorful.CVIOLET + options +
           Colorful.CEND)
 
 bot.start()

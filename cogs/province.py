@@ -156,11 +156,48 @@ class Province(interactions.Extension):
     async def rename(self, ctx: interactions.CommandContext, prowincja: str, nowa_nazwa: str, admin: str = ''):
         await ctx.defer()
         # Don't read this either.
+        country_id = db.pax_engine.connect().execute(text(
+                f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
+            )).fetchone()
+
         if admin != "" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
             admin_bool = True
         else:
             admin_bool = False
-        await ctx.send("Test")
+
+        if prowincja.startswith('#'):
+            province = db.pax_engine.connect().execute(text(
+                f'SELECT province_id, province_name, country_id, country_name FROM provinces NATURAL JOIN countries '
+                f'WHERE province_id = "{prowincja[1:]}"'
+            )).fetchone()
+        else:
+            province = db.pax_engine.connect().execute(text(
+                f'SELECT province_id, province_name, country_id, country_name FROM provinces NATURAL JOIN countries '
+                f'WHERE province_name = "{prowincja}"'
+            )).fetchone()
+
+        # Errors
+        if len(nowa_nazwa) > 17:
+            await ctx.send(f"```ansi\nNazwa prowincji nie może mieć więcej niż \u001b[0;32m17\u001b[0;0m znaków!\n"
+                           f"Nazwa '{nowa_nazwa}' ma ich \u001b[0;31m{len(nowa_nazwa)}\u001b[0;0m.```")
+            return
+        if '"' in nowa_nazwa:
+            await ctx.send(f"```ansi\nNazwa prowincji nie może mieć \u001b[0;31mcudzysłowu\u001b[0;0m!```")
+            return
+        if country_id[0] != province[2] and not admin_bool:
+            await ctx.send(f"```ansi\nNie możesz zmienić nazwy prowincji która do ciebie nie należy!\n"
+                           f"Prowincja '{province[1]}' \u001b[0;30m({province[0]}) \u001b[0;0m "
+                           f"należy do państwa '{province[3]}'.```")
+            return
+        with db.pax_engine.connect() as conn:
+            conn.begin()
+            conn.execute(text(f'UPDATE provinces SET province_name = "{nowa_nazwa} "'
+                              f'WHERE province_id = {province[0]}'))
+            conn.commit()
+            conn.close()
+        # print(f'UPDATE provinces SET province_name = "{nowa_nazwa}" WHERE province_id = {province[0]}')
+        await ctx.send(f"```ansi\nPomyślnie zmieniono nazwę prowincji #{province[0]}\n"
+                       f"\u001b[1;31m'{province[1]}'\u001b[0;0m ➤ \u001b[1;32m'{nowa_nazwa}'\u001b[0;0m```")
 
     """
     @interactions.extension_command(description='dummy')

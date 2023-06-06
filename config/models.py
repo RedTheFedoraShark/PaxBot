@@ -10,8 +10,8 @@ from interactions.ext.paginator import Page
 async def pagify(dataframe: list):
     bit = ''
     bits = []
-    for line in dataframe:
-        if len(bit) > 1860:
+    for i, line in enumerate(dataframe):
+        if len(bit) > 1860 or i == len(dataframe) - 1:
             bits.append(bit)
             bit = ''
         bit = f"{bit}\n{line}"
@@ -26,24 +26,28 @@ async def build_province_list(country_id: int):
     connection = db.pax_engine.connect()
     table = connection.execute(text(
         f"SELECT province_name, province_id, region_name, terrain_name, good_name, religion_name, province_pops, "
-        f"province_autonomy FROM provinces NATURAL JOIN regions NATURAL JOIN goods NATURAL JOIN terrains "
+        f"c.country_id, cc.country_id "
+        f"FROM provinces p NATURAL JOIN regions NATURAL JOIN goods NATURAL JOIN terrains "
         f"NATURAL JOIN religions "
-        f"WHERE country_id = {country_id} OR controller_id = {country_id}")).fetchall()
+        f"INNER JOIN countries c ON p.country_id = c.country_id "
+        f"INNER JOIN countries cc ON p.controller_id = cc.country_id "
+        f"WHERE p.country_id = {country_id} OR p.controller_id = {country_id}")).fetchall()
 
     df = pd.DataFrame(table, columns=[
-        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Autonomia'])
+        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Status', 'Status2'])
     df = df.sort_values(by=['ID'])
     for i, row in df.iterrows():
         df.at[i, 'ID'] = f"\u001b[0;30m ({df['ID'][i]})\u001b[0;0m"
-        if df['Autonomia'][i] > 67:
-            autonomia = f"\u001b[0;31m{df['Autonomia'][i]}%\u001b[0;0m"
-        elif df['Autonomia'][i] < 33:
-            autonomia = f"\u001b[0;32m{df['Autonomia'][i]}%\u001b[0;0m"
-        else:
-            autonomia = f"\u001b[0;33m{df['Autonomia'][i]}%\u001b[0;0m"
-        df.at[i, 'Autonomia'] = autonomia
+        if df.at[i, 'Status'] == df.at[i, 'Status2']:
+            print(type(df.at[i, 'Status']))
+            print(type(country_id))
+            df.at[i, 'Status'] = f"\u001b[0;32mKontrola\u001b[0;0m"
+        elif df.at[i, 'Status2'] == country_id:
+            df.at[i, 'Status'] = f"\u001b[0;33mOkupacja\u001b[0;0m"
+        elif df.at[i, 'Status'] == country_id:
+            df.at[i, 'Status'] = f"\u001b[0;31mOkupacja\u001b[0;0m"
     combined = df['Prowincja'] + df['ID']
-    df.drop(['Prowincja', 'ID'], axis=1, inplace=True)
+    df.drop(['Prowincja', 'ID', 'Status2'], axis=1, inplace=True)
     df.insert(0, 'Prowincja (ID)', combined)
     return df
 
@@ -52,36 +56,55 @@ async def build_province_list_admin():
     connection = db.pax_engine.connect()
     table = connection.execute(text(
         f"SELECT province_name, province_id, region_name, terrain_name, good_name, religion_name, province_pops, "
-        f"province_autonomy FROM provinces NATURAL JOIN regions NATURAL JOIN goods NATURAL JOIN terrains "
-        f"NATURAL JOIN religions")).fetchall()
+        f"c.country_id, cc.country_id "
+        f"FROM provinces p NATURAL JOIN regions NATURAL JOIN goods NATURAL JOIN terrains "
+        f"NATURAL JOIN religions "
+        f"INNER JOIN countries c ON p.country_id = c.country_id "
+        f"INNER JOIN countries cc ON p.controller_id = cc.country_id "
+        f"WHERE province_id BETWEEN 1 AND 251")).fetchall()
 
     df = pd.DataFrame(table, columns=[
-        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Autonomia'])
+        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Status', 'Status2'])
     df = df.sort_values(by=['ID'])
     for i, row in df.iterrows():
         df.at[i, 'ID'] = f"\u001b[0;30m ({df['ID'][i]})\u001b[0;0m"
-        if df['Autonomia'][i] > 67:
-            autonomia = f"\u001b[0;31m{df['Autonomia'][i]}%\u001b[0;0m"
-        elif df['Autonomia'][i] < 33:
-            autonomia = f"\u001b[0;32m{df['Autonomia'][i]}%\u001b[0;0m"
+        print(df.at[i, 'Status'])
+        if df.at[i, 'Status'] == 255:
+            df.at[i, 'Status'] = f"\u001b[0;34mPuste\u001b[0;0m"
+        elif df.at[i, 'Status'] == df.at[i, 'Status2']:
+            df.at[i, 'Status'] = f"\u001b[0;32mKontrola\u001b[0;0m"
         else:
-            autonomia = f"\u001b[0;33m{df['Autonomia'][i]}%\u001b[0;0m"
-        df.at[i, 'Autonomia'] = autonomia
+            df.at[i, 'Status'] = f"\u001b[0;31mOkupacja\u001b[0;0m"
     combined = df['Prowincja'] + df['ID']
-    df.drop(['Prowincja', 'ID'], axis=1, inplace=True)
+    df.drop(['Prowincja', 'ID', 'Status2'], axis=1, inplace=True)
     df.insert(0, 'Prowincja (ID)', combined)
     return df
 
 
 async def build_province_embed(province_id: int):
     connection = db.pax_engine.connect()
-    query = connection.execute(text(
-        f'SELECT * FROM provinces NATURAL JOIN countries NATURAL JOIN religions WHERE province_id = "{province_id}"'
-    )).fetchall()
-    # Repairing names for multiple players on one country
-    #query = list(query[0])
-    #query2 = connection.execute(text(
-    #    f'SELECT SUM(province_pops), COUNT(*) FROM provinces WHERE country_id = "{country_id}"')).fetchone()
+    province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name = connection.execute(text(
+        f'SELECT province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name '
+        f'FROM provinces NATURAL JOIN religions '
+        f'LEFT JOIN countries ON provinces.country_id=countries.country_id NATURAL JOIN terrains NATURAL JOIN goods '
+        f'NATURAL JOIN regions '
+        f'WHERE province_id = {province_id}'
+    )).fetchone()
+    pops = connection.execute(text(
+        f'SELECT SUM(province_pops) FROM provinces WHERE province_id = "{province_id}"')).fetchone()[0]
+    workers = connection.execute(text(
+        f'SELECT SUM(building_workers) FROM provinces NATURAL JOIN structures NATURAL JOIN buildings '
+        f'WHERE province_id = {province_id}')).fetchone()[0]
+    workers = workers if workers is not None else 0
+    conscripted = connection.execute(text(f"SELECT SUM(unit_manpower) FROM armies NATURAL JOIN units "
+                                          f"LEFT JOIN provinces ON armies.province_id = provinces.province_id "
+                                          f"WHERE armies.army_origin = {province_id}")).fetchone()[0]
+    conscripted = conscripted if conscripted is not None else 0
+    pop_field = pd.DataFrame([['Mieszkańcy', f'{pops}'],
+                              ['Pracujący', f'{workers} ({int(int(workers) / int(pops) * 100)}%)'],
+                              ['Powołani', f'{conscripted}']], columns=['', '1234567890123456789012345'])
+    pop_field = pop_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
+
     ## Creating embed elements
     #embed_footer = interactions.EmbedFooter(
     #    text=query[13],
@@ -93,17 +116,21 @@ async def build_province_embed(province_id: int):
     #embed_author = interactions.EmbedAuthor(
     #    name=query[3],
     #)
-
+    f1 = interactions.EmbedField(name="Region", value=f"```{region_name}```", inline=True)
+    f2 = interactions.EmbedField(name="Teren", value=f"```{terrain_name}```", inline=True)
+    f3 = interactions.EmbedField(name="Religia", value=f"```{religion_name}```", inline=True)
+    f4 = interactions.EmbedField(name="Populacja", value=f"```{pop_field}```", inline=False)
+    image = interactions.EmbedImageStruct(url=terrain_image_url)
     # Building the Embed
     embed = interactions.Embed(
         #color=int(query[7], 16),
-        title=str(province_id),
-        # description=result_countries[5],
+        title=f"{province_name} ({province_id})",
         #url=query[11],
         #footer=embed_footer,
         #thumbnail=embed_thumbnail,
         #author=embed_author,
-        #fields=[f1, f2, fb, f3, f4, fb, f5, f6, fb, f7, f8]
+        fields=[f1, f2, f3, f4],
+        image=image
     )
     connection.close()
     return embed

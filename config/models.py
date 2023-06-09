@@ -1,6 +1,7 @@
 import random
 import pandas as pd
 import interactions
+import re
 from database import *
 from sqlalchemy import text
 from interactions.ext.paginator import Page
@@ -81,15 +82,23 @@ async def build_province_list_admin():
     return df
 
 
-async def build_province_embed(province_id: int):
+async def build_province_embed(province_id: int, country_id: int):
     connection = db.pax_engine.connect()
-    province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name = connection.execute(text(
-        f'SELECT province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name '
-        f'FROM provinces NATURAL JOIN religions '
-        f'LEFT JOIN countries ON provinces.country_id=countries.country_id NATURAL JOIN terrains NATURAL JOIN goods '
+    province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name, cid1, cn1, cid2, cn2 = connection.execute(text(
+        f'SELECT province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name, c.country_id, c.country_name, cc.country_id, cc.country_name '
+        f'FROM provinces p NATURAL JOIN religions '
+        f'NATURAL JOIN terrains NATURAL JOIN goods '
         f'NATURAL JOIN regions '
+        f"INNER JOIN countries c ON p.country_id = c.country_id "
+        f"INNER JOIN countries cc ON p.controller_id = cc.country_id "
         f'WHERE province_id = {province_id}'
     )).fetchone()
+    print(cid1, cid2)
+    print(cn1, cn2)
+    if country_id == 0:
+        country_id = cid1
+    if not good_name:
+        good_name = "-"
     pops = connection.execute(text(
         f'SELECT SUM(province_pops) FROM provinces WHERE province_id = "{province_id}"')).fetchone()[0]
     workers = connection.execute(text(
@@ -100,10 +109,37 @@ async def build_province_embed(province_id: int):
                                           f"LEFT JOIN provinces ON armies.province_id = provinces.province_id "
                                           f"WHERE armies.army_origin = {province_id}")).fetchone()[0]
     conscripted = conscripted if conscripted is not None else 0
-    pop_field = pd.DataFrame([['Mieszkańcy', f'{pops}'],
-                              ['Pracujący', f'{workers} ({int(int(workers) / int(pops) * 100)}%)'],
-                              ['Powołani', f'{conscripted}']], columns=['', '1234567890123456789012345'])
+    pop_field = pd.DataFrame([['Mieszkańcy:', f'{pops}'],
+                              ['Pracujący:',  f'{workers} ({int(int(workers) / int(pops) * 100)}%)'],
+                              ['Powołani:',   f'{conscripted}']], columns=['1234567890', '1234567890123456789012345'])
     pop_field = pop_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
+    pop_field = re.sub('..\\n..', '\n', pop_field)
+    pop_field = pop_field.replace(' |', ' ')
+    if cid1 == country_id:
+        cn1 = f"\u001b[0;32m{cn1}\u001b[0;0m"
+    else:
+        cn1 = f"\u001b[0;31m{cn1}\u001b[0;0m"
+    if cid2 == country_id:
+        cn2 = f"\u001b[0;32m{cn2}\u001b[0;0m"
+    else:
+        cn2 = f"\u001b[0;31m{cn2}\u001b[0;0m"
+    status_field = pd.DataFrame([['Właściciel:', f'{cn1}'],
+                                ['Kontroler:',   f'{cn2}']],
+                                columns=['1234567890', '1234567890123456789012345'])
+    status_field = status_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
+    status_field = re.sub('..\\n..', '\n', status_field)
+    status_field = status_field.replace(' |', ' ')
+    army_field = pd.DataFrame([['#321',         f'Karbadia', f' Ruchy:  3'],
+                               ['10000 (100%)', f'Topornicy Boży123456', f' Widoczna'],
+                               ['#321', f'Karbadia', f' Ruchy:  3'],
+                               ['10000 (100%)', f'Topornicy Boży123456', f' Widoczna']],
+                               columns=['12345678901', '1234567890123456789', ''])
+    army_field = army_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
+    army_field = re.sub('..\\n..', '\n', army_field)
+    army_field = re.sub('.\\|.', '', army_field)
+    army_field = army_field.replace("#", "\n#")
+    print(status_field)
+    print(repr(status_field))
 
     ## Creating embed elements
     #embed_footer = interactions.EmbedFooter(
@@ -116,20 +152,24 @@ async def build_province_embed(province_id: int):
     #embed_author = interactions.EmbedAuthor(
     #    name=query[3],
     #)
+    f0 = interactions.EmbedField(name="", value="", inline=False)
     f1 = interactions.EmbedField(name="Region", value=f"```{region_name}```", inline=True)
     f2 = interactions.EmbedField(name="Teren", value=f"```{terrain_name}```", inline=True)
     f3 = interactions.EmbedField(name="Religia", value=f"```{religion_name}```", inline=True)
-    f4 = interactions.EmbedField(name="Populacja", value=f"```{pop_field}```", inline=False)
+    f4 = interactions.EmbedField(name="Zasoby", value=f"```{good_name}```", inline=True)
+    f5 = interactions.EmbedField(name="Populacja", value=f"```{pop_field[2:-2]}```", inline=False)
+    f6 = interactions.EmbedField(name="Status", value=f"```ansi\n{status_field[2:-2]}```", inline=False)
+    f7 = interactions.EmbedField(name="Armie", value=f"```ansi\n{army_field[2:-2]}```", inline=False)
     image = interactions.EmbedImageStruct(url=terrain_image_url)
     # Building the Embed
     embed = interactions.Embed(
         #color=int(query[7], 16),
-        title=f"{province_name} ({province_id})",
+        title=f"{province_name} (#{province_id})",
         #url=query[11],
         #footer=embed_footer,
         #thumbnail=embed_thumbnail,
         #author=embed_author,
-        fields=[f1, f2, f3, f4],
+        fields=[f1, f2, f0, f3, f4, f5, f6, f7],
         image=image
     )
     connection.close()

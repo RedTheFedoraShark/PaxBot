@@ -91,23 +91,29 @@ class Province(interactions.Extension):
 
         if tryb == "pages":
             if admin_bool:
+                print(f"CountryId {country_id}")
                 if country_id:
                     province_ids = db.pax_engine.connect().execute(text(
-                        f'SELECT province_id FROM players NATURAL JOIN countries NATURAL JOIN provinces '
-                        f'WHERE country_id = {country_id[0]}')).fetchall()
+                        f'SELECT province_id FROM provinces NATURAL JOIN countries '
+                        f'WHERE country_id = {country_id[0]} OR controller_id = {country_id[0]}')).fetchall()
                 else:
                     province_ids = list((x, ) for x in range(1, 322))
             else:
+                country_id = db.pax_engine.connect().execute(text(
+                    f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = "{ctx.author.id}"'
+                )).fetchone()
                 province_ids = db.pax_engine.connect().execute(text(
-                    f'SELECT province_id FROM players NATURAL JOIN countries NATURAL JOIN provinces '
-                    f'WHERE player_id = {ctx.author.id}')).fetchall()
+                    f'SELECT province_id FROM provinces NATURAL JOIN countries '
+                    f'WHERE country_id = {country_id[0]} OR controller_id = {country_id[0]}')).fetchall()
             non_dup_ids = set()
             for x in province_ids:
                 non_dup_ids.add(x[0])
             non_dup_ids = sorted(non_dup_ids)
             pages = []
+            if not country_id:
+                country_id = [0]
             for x in non_dup_ids:
-                page = await models.build_province_embed(x)
+                page = await models.build_province_embed(x, country_id[0])
                 pages.append(Page(embeds=page))
             if len(pages) > 25:
                 use = True

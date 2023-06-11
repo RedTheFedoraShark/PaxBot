@@ -114,7 +114,12 @@ class Province(interactions.Extension):
                 country_id = [0]
             for x in non_dup_ids:
                 page = await models.build_province_embed(x, country_id[0])
-                pages.append(Page(embeds=page))
+                # if returned value is a list, unpack it
+                if isinstance(page, list):
+                    for p in page:
+                        pages.append(Page(embeds=p))
+                else:
+                    pages.append(Page(embeds=page))
             if len(pages) > 25:
                 use = True
             else:

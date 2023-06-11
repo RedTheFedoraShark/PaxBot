@@ -21,6 +21,49 @@ async def pagify(dataframe: list):
         pages.append(Page(title=str(i+1) + ". Strona", content=f"```ansi\n{bit}```"))
     return pages
 
+# Build an army info table as tabulated strings and return them as a list of strings
+# Input is a list of lists of required fields
+# Also country_id for checking invisible units
+
+
+async def build_army_info(query, country_id):
+    table_list = []
+    indexes = [7, 33, 52, 85, 97, 142, 187, 212, 232]
+    template = list("""Armia: $                         $          
+Jdnst: $                         Ruchy: $   
+Typ:   $                                    
+Kraj:  $                        Liczebność: 
+Prwnc: $                        $           
+Pchdz: $""")
+    for unit in query:
+        # |    7        |33 |        52       |   85  |      97     |    142   |   |  187       |    212    |   232    |
+        # | Armia 1 | 1 | 1 | Wojownicy 1 | 1 | 1 | 1 | Templat | 1 | Karbadia | 1 | Test2 | 52 | 100 | 100 |Kanonia|50|
+        aname, aid, vis, uname, uid, lmoves, moves, tname, tid, cname, cid, pname, pid, quan, astr, oname, oid = unit
+
+        if not (country_id == 0 or country_id == cid) and vis == 0:
+            pass
+        elif (country_id == 0 or country_id == cid) and vis == 0:
+            vis = "Niewidoczny"
+        else:
+            vis = "Widoczny"
+
+        new_field = list("""Armia: $                         $          
+Jdnst: $                         Ruchy: $   
+Typ:   $                                    
+Kraj:  $                        Liczebność: 
+Prwnc: $                        $           
+Pchdz: $""")
+
+        word_list = [f"{aname} #{aid}", f"{vis}", f"{uname} #{uid}", f"{lmoves}/{moves}", f"{tname} #{tid}",
+                     f"{cname}", f"{pname} #{pid}", f"{int(quan/100*astr)}/{quan} {astr}%", f"{oname} #{oid}"]
+
+        for n, i in enumerate(indexes):
+            new_field[indexes[n]: indexes[n] + len(word_list[n])] = list(word_list[n])
+
+        table_list.append(''.join(new_field))
+    print(table_list)
+    return table_list
+
 
 # /province list
 async def build_province_list(country_id: int):
@@ -83,9 +126,11 @@ async def build_province_list_admin():
 
 
 async def build_province_embed(province_id: int, country_id: int):
+    embeds = []
     connection = db.pax_engine.connect()
     province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name, cid1, cn1, cid2, cn2 = connection.execute(text(
-        f'SELECT province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name, c.country_id, c.country_name, cc.country_id, cc.country_name '
+        f'SELECT province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name, '
+        f'c.country_id, c.country_name, cc.country_id, cc.country_name '
         f'FROM provinces p NATURAL JOIN religions '
         f'NATURAL JOIN terrains NATURAL JOIN goods '
         f'NATURAL JOIN regions '
@@ -93,8 +138,6 @@ async def build_province_embed(province_id: int, country_id: int):
         f"INNER JOIN countries cc ON p.controller_id = cc.country_id "
         f'WHERE province_id = {province_id}'
     )).fetchone()
-    print(cid1, cid2)
-    print(cn1, cn2)
     if country_id == 0:
         country_id = cid1
     if not good_name:
@@ -129,17 +172,6 @@ async def build_province_embed(province_id: int, country_id: int):
     status_field = status_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
     status_field = re.sub('..\\n..', '\n', status_field)
     status_field = status_field.replace(' |', ' ')
-    army_field = pd.DataFrame([['#321',         f'Karbadia', f' Ruchy:  3'],
-                               ['10000 (100%)', f'Topornicy Boży123456', f' Widoczna'],
-                               ['#321', f'Karbadia', f' Ruchy:  3'],
-                               ['10000 (100%)', f'Topornicy Boży123456', f' Widoczna']],
-                               columns=['12345678901', '1234567890123456789', ''])
-    army_field = army_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
-    army_field = re.sub('..\\n..', '\n', army_field)
-    army_field = re.sub('.\\|.', '', army_field)
-    army_field = army_field.replace("#", "\n#")
-    print(status_field)
-    print(repr(status_field))
 
     ## Creating embed elements
     #embed_footer = interactions.EmbedFooter(
@@ -159,7 +191,66 @@ async def build_province_embed(province_id: int, country_id: int):
     f4 = interactions.EmbedField(name="Zasoby", value=f"```{good_name}```", inline=True)
     f5 = interactions.EmbedField(name="Populacja", value=f"```{pop_field[2:-2]}```", inline=False)
     f6 = interactions.EmbedField(name="Status", value=f"```ansi\n{status_field[2:-2]}```", inline=False)
-    f7 = interactions.EmbedField(name="Armie", value=f"```ansi\n{army_field[2:-2]}```", inline=False)
+    #f7 = interactions.EmbedField(name="Armie", value=f"```ansi\n{army_field[2:-2]}```", inline=False)
+    f7 = interactions.EmbedField(name="Armie:", value='', inline=False)
+    fields = [f1, f2, f0, f3, f4, f5, f6, f7]
+    armies = connection.execute(text(
+          f"""SELECT 
+              a.army_name, 
+              a.army_id, 
+              army_visible, 
+              a.unit_name, 
+              a.unit_id, 
+              a.army_movement, 
+              a.army_movement_left, 
+              a.unit_name,
+              a.unit_template_id, 
+              c.country_name, 
+              a.country_id, 
+              p1.province_name, 
+              a.province_id, 
+              uc.item_quantity, 
+              a.army_strenght, 
+              p2.province_name, 
+              a.army_origin 
+            FROM 
+              units u 
+              INNER JOIN armies a ON a.unit_template_id = u.unit_template_id 
+              INNER JOIN units_cost uc ON u.unit_template_id = uc.unit_template_id 
+              INNER JOIN provinces p1 ON a.province_id = p1.province_id 
+              INNER JOIN provinces p2 ON a.army_origin = p2.province_id 
+              INNER JOIN countries c ON a.country_id = c.country_id 
+            WHERE 
+              uc.item_id = 3
+            AND
+              a.province_id = {province_id}""")).fetchall()
+    print(armies)
+    a_fields = await build_army_info(armies, country_id)
+    army_fields = []
+    for army in a_fields:
+        army_fields.append(interactions.EmbedField(name="", value=f"```\n{army}```", inline=False))
+    print(len(army_fields))
+    if len(army_fields) <= 10:
+        first_fields = fields + army_fields
+    else:
+        first_fields = fields
+        for i, field in enumerate(army_fields):
+            if i < 10:
+                first_fields.append(field)
+                print(i)
+        temp_field = []
+        fields_table = []
+        for i in range(10, len(army_fields)):
+            if len(temp_field) < 24:
+                temp_field.append(army_fields[i])
+            else:
+                fields_table.append(temp_field)
+                temp_field = []
+        fields_table.append(temp_field)
+        for army_embed in fields_table:
+            embeds.insert(1, interactions.Embed(title=f"Armie w prowincji {province_name} (#{province_id})",
+                                             fields=[f7] + army_embed))
+
     image = interactions.EmbedImageStruct(url=terrain_image_url)
     # Building the Embed
     embed = interactions.Embed(
@@ -169,11 +260,12 @@ async def build_province_embed(province_id: int, country_id: int):
         #footer=embed_footer,
         #thumbnail=embed_thumbnail,
         #author=embed_author,
-        fields=[f1, f2, f0, f3, f4, f5, f6, f7],
+        fields=first_fields,
         image=image
     )
+    embeds.insert(0, embed)
     connection.close()
-    return embed
+    return embeds
 
 
 # /info country

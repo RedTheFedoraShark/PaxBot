@@ -13,93 +13,75 @@ class Army(interactions.Extension):
         self.bot = bot
 
     @interactions.extension_command(
-        name="army",
         description="manage armies"
-        # options=[
-        #     interactions.Option(
-        #         name="list",
-        #         description="List armies (army) and details",
-        #         type=interactions.OptionType(1)
-        #     ),
-        #
-        #     interactions.Option(
-        #         name="merge",
-        #         description="Merge a few armies together",
-        #         type=interactions.OptionType(1)
-        #     ),
-        #
-        #     interactions.Option(
-        #         name="split",
-        #         description="Merge a few armies together",
-        #         type=interactions.OptionType(1)
-        #     ),
-        #
-        #     interactions.Option(
-        #         name="move",
-        #         description="Merge a few armies together",
-        #         type=interactions.OptionType(1)
-        #     )
-        # ]
     )
     async def army(self, ctx: interactions.CommandContext):
         return
 
     @army.subcommand(
-        description="aa",
-        options=[
-            interactions.Option(
-                name='mode',
-                description='What would you like to list?',
-                type=interactions.OptionType.STRING,
-                required=True
-            ),
-            interactions.Option(
-                name='province',
-                description='wow do you really need it?',
-                type=interactions.OptionType.STRING,
-                required=False
-            )
-        ]
+        description="List armies"
     )
-    async def list(self, ctx: interactions.CommandContext, mode: str, province=None):
+    async def list(self, ctx: interactions.CommandContext, target: str=None, admin: bool = False):
         connection = db.pax_engine.connect()
-        match mode:
-            case 'owned':
+        original_input = target
+        MODE = 'country'
+        if target is None:
+            target = connection.execute(
+                text(f'SELECT country_id FROM players WHERE player_id = {ctx.author.id};')).fetchone()[0]
+        else:
+            target = target.strip()
+
+            if target.startswith('<@') and target.endswith('>'):
+                target = connection.execute(
+                    text(f'SELECT country_id FROM players WHERE player_id = {target[2:-1]};')).fetchone()[0]
+            elif target.startswith('#'):
+                MODE = 'province'
+                # select from borders twice, zip and check if the proince is seen by the player
+                # visible
+            else:
                 pass
-            case 'province':
-                pass
-            case _:
-                await ctx.send('Mode selected does not exist!')
+
+        if target == None:
+            await ctx.send(f'There is no such {MODE} as "{original_input}".')
+            return
+
+
         connection.close()
         return
 
     @army.subcommand(
-        name='dump',
-        description='!ADMIN ONLY! Dump all the armies into chat',
-        options=[
-            interactions.Option(
-                name='province',
-                description='wow do you really need it?',
-                type=interactions.OptionType.INTEGER,
-                required=False
-            )
-        ]
+        description="move"
     )
-    async def dump(self, ctx: interactions.CommandContext, province=None):
-        connection = db.pax_engine.connect()
-        if not await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
-            await ctx.send('You have insufficient permissions to run this command')
-            connection.close()
-            return
+    async def disband(self, ctx: interactions.CommandContext):
+        pass
 
-        if province is not None:
-            query = 'SELECT * FROM armies WHERE province_id = province;'
-        else:
-            query = 'SELECT * FROM armies WHERE 1;'
+    @army.subcommand(
+        description=""
+    )
+    async def reorg(self, ctx: interactions.CommandContext):
+        pass
 
-        result = connection.execute(text(query)).fetchall()
-        await ctx.send(f'{result}')
-        connection.close()
-        return
+    @army.subcommand(
+        description=""
+    )
+    async def rename(self, ctx: interactions.CommandContext):
+        pass
 
+    @army.subcommand(
+        description=""
+    )
+    async def recruit(self, ctx: interactions.CommandContext):
+        pass
+
+    @army.subcommand(
+        description=""
+    )
+    async def templates(self, ctx: interactions.CommandContext):
+        pass
+
+    @army.subcommand(
+        description=""
+    )
+    async def orders(self, ctx: interactions.CommandContext):
+        pass
 

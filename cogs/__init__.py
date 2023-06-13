@@ -1,15 +1,15 @@
 # needs to include every module name in cogs package in order to be loaded by the bot
 
 __all__ = [
-    #'army',
+    'army',
     #'template',
     #'debug',
-    'dbdebug',
+    #'dbdebug',
     #'turntools',
-    'map',
-    'info',
-    'inventory',
-    'commands',
-    'admin',
-    'province'
+    #'map',
+    #'info',
+    #'inventory',
+    #'commands',
+    #'admin',
+    #'province'
 ]

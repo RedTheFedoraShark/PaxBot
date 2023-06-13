@@ -24,3 +24,4 @@ config/token.json
 .idea/inspectionProfiles/profiles_settings.xml
 gfx/maps/final_image.png
 gfx/maps/final_image.png
+cogs/__init__.py

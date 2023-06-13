@@ -21,11 +21,10 @@ async def pagify(dataframe: list):
         pages.append(Page(title=str(i+1) + ". Strona", content=f"```ansi\n{bit}```"))
     return pages
 
+
 # Build an army info table as tabulated strings and return them as a list of strings
 # Input is a list of lists of required fields
 # Also country_id for checking invisible units
-
-
 async def build_army_info(query, country_id):
     table_list = []
     indexes = [7, 33, 52, 85, 97, 142, 187, 212, 232]
@@ -64,6 +63,65 @@ Pchdz: $""")
     print(table_list)
     return table_list
 
+
+# /army list
+async def build_army_list(country_id: int):
+    connection = db.pax_engine.connect()
+    table = connection.execute(text(
+          f"""SELECT 
+              a.army_name, 
+              a.army_id, 
+              a.unit_name, 
+              a.unit_id, 
+              ut.unit_name, 
+              ut.unit_template_id, 
+              uc.item_quantity, 
+              a.army_strenght, 
+              a.province_id, 
+              a.army_movement_left, 
+              ut.unit_movement 
+            FROM 
+              armies a 
+              INNER JOIN units ut ON a.unit_template_id = ut.unit_template_id 
+              INNER JOIN units_cost uc ON a.unit_template_id = uc.unit_template_id 
+            WHERE 
+              uc.item_id = 3 
+              AND a.country_id = {country_id};
+          """)).fetchall()
+    print(table)
+
+    df = pd.DataFrame(table, columns=[
+        'aname', 'aid', 'uname', 'uid', 'utname', 'utid', 'qua', 'str', 'pid', 'aml', 'um'])
+    df = df.sort_values(by=['aid'])
+    df2 = pd.DataFrame(columns=[
+        'Armia (ID)', 'Jednostka (ID)', 'Typ Jednostki (ID)', 'Liczebność', 'Prwnc', 'Ruch'])
+    for i, row in df.iterrows():
+        army = f"{row[0]} ({row[1]})"
+        unit = f"{row[2]} ({row[3]})"
+        template = f"{row[4]} ({row[5]})"
+        quantity = f"{int(row[6] / 100 * row[7])}/{row[6]} {row[7]}%"
+        province = f"#{row[8]}"
+        movement = f"{row[9]}/{row[10]}"
+        df2.loc[f'{i}'] = [army, unit, template, quantity, province, movement]
+    print(df2)
+    """df = pd.DataFrame(table, columns=[
+        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Status', 'Status2'])
+    df = df.sort_values(by=['ID'])
+    for i, row in df.iterrows():
+        df.at[i, 'ID'] = f"\u001b[0;30m ({df['ID'][i]})\u001b[0;0m"
+        if df.at[i, 'Status'] == df.at[i, 'Status2']:
+            print(type(df.at[i, 'Status']))
+            print(type(country_id))
+            df.at[i, 'Status'] = f"\u001b[0;32mKontrola\u001b[0;0m"
+        elif df.at[i, 'Status2'] == country_id:
+            df.at[i, 'Status'] = f"\u001b[0;33mOkupacja\u001b[0;0m"
+        elif df.at[i, 'Status'] == country_id:
+            df.at[i, 'Status'] = f"\u001b[0;31mOkupacja\u001b[0;0m"
+    combined = df['Prowincja'] + df['ID']
+    df.drop(['Prowincja', 'ID', 'Status2'], axis=1, inplace=True)
+    df.insert(0, 'Prowincja (ID)', combined)"""
+
+    return df2
 
 # /province list
 async def build_province_list(country_id: int):

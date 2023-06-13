@@ -52,7 +52,6 @@ def province_income(income: list, province_id: int):
     return income
 
 
-
 # all class names from this file have to be included in def below
 def setup(bot):
     Province(bot)
@@ -74,6 +73,7 @@ class Province(interactions.Extension):
     @interactions.option(name='admin', description='Jesteś admin?')
     async def list(self, ctx: interactions.CommandContext, tryb: str, admin: str = ''):
         # God forgive me for what I have done with this code.
+        await ctx.defer()
         country_id = False
         index = 0
         if admin != "" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
@@ -162,18 +162,18 @@ class Province(interactions.Extension):
                     pages=pages
                 ).run()
 
-    @province.subcommand(description="Lista prowincji twojego państwa.")
+    @province.subcommand(description="Zmiana nazwy twojej prowincji.")
     @interactions.option(name='prowincja', description='#ID albo obecna nazwa prowincji.')
     @interactions.option(name='nowa_nazwa', description='Nowa nazwa prowincji do 17 znaków.')
     @interactions.option(name='admin', description='Jesteś admin?')
-    async def rename(self, ctx: interactions.CommandContext, prowincja: str, nowa_nazwa: str, admin: str = ''):
+    async def rename(self, ctx: interactions.CommandContext, prowincja: str, nowa_nazwa: str):
         await ctx.defer()
         # Don't read this either.
         country_id = db.pax_engine.connect().execute(text(
                 f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
             )).fetchone()
 
-        if admin != "" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+        if await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
             admin_bool = True
         else:
             admin_bool = False
@@ -256,3 +256,4 @@ class Province(interactions.Extension):
 
         connection.close()
         return
+    """

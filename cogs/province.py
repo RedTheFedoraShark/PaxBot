@@ -163,10 +163,9 @@ class Province(interactions.Extension):
                 ).run()
 
     @province.subcommand(description="Zmiana nazwy twojej prowincji.")
-    @interactions.option(name='prowincja', description='#ID albo obecna nazwa prowincji.')
+    @interactions.option(name='nazwa', description='#ID albo obecna nazwa prowincji.')
     @interactions.option(name='nowa_nazwa', description='Nowa nazwa prowincji do 17 znaków.')
-    @interactions.option(name='admin', description='Jesteś admin?')
-    async def rename(self, ctx: interactions.CommandContext, prowincja: str, nowa_nazwa: str):
+    async def rename(self, ctx: interactions.CommandContext, nazwa: str, nowa_nazwa: str):
         await ctx.defer()
         # Don't read this either.
         country_id = db.pax_engine.connect().execute(text(
@@ -178,15 +177,15 @@ class Province(interactions.Extension):
         else:
             admin_bool = False
 
-        if prowincja.startswith('#'):
+        if nazwa.startswith('#'):
             province = db.pax_engine.connect().execute(text(
                 f'SELECT province_id, province_name, country_id, country_name FROM provinces NATURAL JOIN countries '
-                f'WHERE province_id = "{prowincja[1:]}"'
+                f'WHERE province_id = "{nazwa[1:]}"'
             )).fetchone()
         else:
             province = db.pax_engine.connect().execute(text(
                 f'SELECT province_id, province_name, country_id, country_name FROM provinces NATURAL JOIN countries '
-                f'WHERE province_name = "{prowincja}"'
+                f'WHERE province_name = "{nazwa}"'
             )).fetchone()
 
         # Errors
@@ -202,6 +201,15 @@ class Province(interactions.Extension):
                            f"Prowincja '{province[1]}' \u001b[0;30m({province[0]}) \u001b[0;0m "
                            f"należy do państwa '{province[3]}'.```")
             return
+        all_names = db.pax_engine.connect().execute(text(
+            f'SELECT province_name FROM provinces'
+        )).fetchall()
+        all_names = [item for sublist in all_names for item in sublist]
+        print(all_names)
+        if nowa_nazwa in all_names:
+            await ctx.send(f"```ansi\nMoże być tylko jedna prowincja z daną nazwą!\n```")
+            return
+
         with db.pax_engine.connect() as conn:
             conn.begin()
             conn.execute(text(f'UPDATE provinces SET province_name = "{nowa_nazwa} "'
@@ -209,7 +217,7 @@ class Province(interactions.Extension):
             conn.commit()
             conn.close()
         # print(f'UPDATE provinces SET province_name = "{nowa_nazwa}" WHERE province_id = {province[0]}')
-        await ctx.send(f"```ansi\nPomyślnie zmieniono nazwę prowincji #{province[0]}\n"
+        await ctx.send(f"```ansi\nPomyślnie zmieniono nazwę prowincji #{province[0]}.\n"
                        f"\u001b[1;31m'{province[1]}'\u001b[0;0m ➤ \u001b[1;32m'{nowa_nazwa}'\u001b[0;0m```")
 
     """

@@ -6,10 +6,10 @@ __all__ = [
     #'debug',
     #'dbdebug',
     #'turntools',
-    #'map',
-    #'info',
-    #'inventory',
-    #'commands',
-    #'admin',
-    #'province'
+    'map',
+    'info',
+    'inventory',
+    'commands',
+    'admin',
+    'province'
 ]

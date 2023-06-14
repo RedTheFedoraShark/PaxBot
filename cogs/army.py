@@ -115,6 +115,62 @@ class Army(interactions.Extension):
                     pages=pages
                 ).run()
 
+    @army.subcommand(description="Zmienia nazwę jednostki lub armii państwa.")
+    @interactions.option(name='typ', description='Czemu chcesz zmienić nazwę?',
+                         choices=[interactions.Choice(name="Armia", value="army"),
+                                  interactions.Choice(name="Jednostka", value="unit")])
+    @interactions.option(name='nazwa', description='Nazwa/ID starej jednostki.')
+    @interactions.option(name='nowa_nazwa', description='Nowa nazwa jednostki.')
+    async def rename(self, ctx: interactions.CommandContext, typ: str, nazwa: str, nowa_nazwa: str):
+        await ctx.defer()
+        country_id = db.pax_engine.connect().execute(text(
+            f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
+        )).fetchone()
+
+        if await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            admin_bool = True
+        else:
+            admin_bool = False
+
+        if typ == "army":
+            keyword = "army"
+            second = "armii"
+        else:
+            keyword = "unit"
+            second = "jednostki"
+
+        if nazwa.startswith('#'):
+            old = db.pax_engine.connect().execute(text(
+                f'SELECT {keyword}_id, {keyword}_name, country_id, country_name FROM armies NATURAL JOIN countries '
+                f'WHERE {keyword}_id = "{nazwa[1:]}"'
+            )).fetchone()
+        else:
+            old = db.pax_engine.connect().execute(text(
+                f'SELECT {keyword}_id, {keyword}_name, country_id, country_name FROM armies NATURAL JOIN countries '
+                f'WHERE {keyword}_name = "{nazwa}"'
+            )).fetchone()
+
+        # Errors
+        if len(nowa_nazwa) > 20:
+            await ctx.send(f"```ansi\nNazwa {second} nie może mieć więcej niż \u001b[0;32m17\u001b[0;0m znaków!\n"
+                           f"Nazwa '{nowa_nazwa}' ma ich \u001b[0;31m{len(nowa_nazwa)}\u001b[0;0m.```")
+            return
+        if '"' in nowa_nazwa:
+            await ctx.send(f"```ansi\nNazwa {second} nie może mieć \u001b[0;31mcudzysłowu\u001b[0;0m!```")
+            return
+        if country_id[0] != old[2] and not admin_bool:
+            await ctx.send(f"```ansi\nNie możesz zmienić nazwy {second} która do ciebie nie należy!```")
+            return
+        with db.pax_engine.connect() as conn:
+            conn.begin()
+            conn.execute(text(f'UPDATE armies SET {keyword}_name = "{nowa_nazwa} "'
+                              f'WHERE {keyword}_id = {old[0]}'))
+            conn.commit()
+            conn.close()
+        # print(f'UPDATE provinces SET province_name = "{nowa_nazwa}" WHERE province_id = {province[0]}')
+        await ctx.send(f"```ansi\nPomyślnie zmieniono nazwę {second} #{old[0]}\n"
+                       f"\u001b[1;31m'{old[1]}'\u001b[0;0m ➤ \u001b[1;32m'{nowa_nazwa}'\u001b[0;0m```")
+
 """
     @interactions.extension_command(
         description="manage armies"

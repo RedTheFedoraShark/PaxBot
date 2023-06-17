@@ -119,8 +119,8 @@ class Army(interactions.Extension):
     @interactions.option(name='typ', description='Czemu chcesz zmienić nazwę?',
                          choices=[interactions.Choice(name="Armia", value="army"),
                                   interactions.Choice(name="Jednostka", value="unit")])
-    @interactions.option(name='nazwa', description='Nazwa/ID starej jednostki.')
-    @interactions.option(name='nowa_nazwa', description='Nowa nazwa jednostki.')
+    @interactions.option(name='nazwa', description='Nazwa/ID starej wojska.')
+    @interactions.option(name='nowa_nazwa', description='Nowa nazwa wojska.')
     async def rename(self, ctx: interactions.CommandContext, typ: str, nazwa: str, nowa_nazwa: str):
         await ctx.defer()
         country_id = db.pax_engine.connect().execute(text(
@@ -151,6 +151,9 @@ class Army(interactions.Extension):
             )).fetchone()
 
         # Errors
+        if not old:
+            await ctx.send(f"```ansi\nPomyślnie zmieniono nazwę {second} #{old[0]}.\n"
+                           f"\u001b[1;31m'{old[1]}'\u001b[0;0m ➤ \u001b[1;32m'{nowa_nazwa}'\u001b[0;0m```")
         if len(nowa_nazwa) > 20:
             await ctx.send(f"```ansi\nNazwa {second} nie może mieć więcej niż \u001b[0;32m17\u001b[0;0m znaków!\n"
                            f"Nazwa '{nowa_nazwa}' ma ich \u001b[0;31m{len(nowa_nazwa)}\u001b[0;0m.```")
@@ -161,15 +164,137 @@ class Army(interactions.Extension):
         if country_id[0] != old[2] and not admin_bool:
             await ctx.send(f"```ansi\nNie możesz zmienić nazwy {second} która do ciebie nie należy!```")
             return
+        army_names = db.pax_engine.connect().execute(text(
+            f'SELECT {keyword}_name FROM armies WHERE country_id = {country_id}'
+        )).fetchall()
+        army_names = [item for sublist in army_names for item in sublist]
+        print(army_names)
+        if nowa_nazwa in army_names:
+            await ctx.send(f"```ansi\nMoże być tylko jedna jednostka/armia z daną nazwą!\n```")
+            return
+
         with db.pax_engine.connect() as conn:
             conn.begin()
-            conn.execute(text(f'UPDATE armies SET {keyword}_name = "{nowa_nazwa} "'
+            conn.execute(text(f'UPDATE armies SET {keyword}_name = "{nowa_nazwa}" '
                               f'WHERE {keyword}_id = {old[0]}'))
             conn.commit()
             conn.close()
         # print(f'UPDATE provinces SET province_name = "{nowa_nazwa}" WHERE province_id = {province[0]}')
-        await ctx.send(f"```ansi\nPomyślnie zmieniono nazwę {second} #{old[0]}\n"
+        await ctx.send(f"```ansi\nPomyślnie zmieniono nazwę {second} #{old[0]}.\n"
                        f"\u001b[1;31m'{old[1]}'\u001b[0;0m ➤ \u001b[1;32m'{nowa_nazwa}'\u001b[0;0m```")
+
+    @army.subcommand(description="Dodaje rozkazy ruchu armii.")
+    @interactions.option(name='nazwa', description='Nazwa/ID armii.')
+    @interactions.option(name='granica', description='Do której prowincji chcesz ruszyć?')
+    @interactions.option(name='admin', description='Jesteś admin?')
+    async def move(self, ctx: interactions.CommandContext, nazwa: str, granica: str, admin: str = ''):
+        await ctx.defer()
+
+        # set up basic variables
+        country_id = db.pax_engine.connect().execute(text(
+            f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
+        )).fetchone()[0]
+
+        if nazwa.startswith('#'):
+            old = db.pax_engine.connect().execute(text(
+                f'SELECT c.country_id, province_name, p.province_id, army_movement_left, a.army_id, a.army_name '
+                f'FROM armies a NATURAL JOIN countries c '
+                f'INNER JOIN provinces p ON a.province_id = p.province_id '
+                f'WHERE army_id = "{nazwa[1:]}" AND c.country_id = {country_id}'
+            )).fetchall()
+            if not old:
+                await ctx.send(f"```ansi\n\u001b[0;31mNie posiadasz\u001b[0;0m armii o ID #{nazwa[1:]}.```")
+                return
+        else:
+            old = db.pax_engine.connect().execute(text(
+                f'SELECT c.country_id, province_name, p.province_id, army_movement_left, a.army_id, a.army_name  '
+                f'FROM armies a NATURAL JOIN countries c '
+                f'INNER JOIN provinces p ON a.province_id = p.province_id '
+                f'WHERE army_name = "{nazwa}" AND c.country_id = {country_id}'
+            )).fetchall()
+            if not old:
+                await ctx.send(f"```ansi\n\u001b[0;31mNie posiadasz\u001b[0;0m armii o nazwie '{nazwa}'.```")
+                return
+
+        if granica.startswith('#'):
+            new = db.pax_engine.connect().execute(text(
+                f'SELECT province_id, province_name FROM provinces '
+                f'WHERE province_id = "{granica[1:]}"'
+            )).fetchone()
+            if not new:
+                await ctx.send(f"```ansi\nProwincja o ID #{granica[1:]} \u001b[0;31mnie istnieje\u001b[0;0m.```")
+                return
+        else:
+            new = db.pax_engine.connect().execute(text(
+                f'SELECT province_id, province_name FROM provinces '
+                f'WHERE province_name = "{granica}"'
+            )).fetchone()
+            if not new:
+                await ctx.send(f"```ansi\nProwincja o nazwie '{granica}' \u001b[0;31mnie istnieje\u001b[0;0m.```")
+                return
+
+        # simply make an exception for admins and forget about it
+        if admin != '' and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            # teleport
+            print("test")
+            with db.pax_engine.connect() as conn:
+                conn.begin()
+                conn.execute(text(f'UPDATE armies SET province_id = {new[0]} '
+                                  f'WHERE army_id = {old[0][4]}'))
+                conn.commit()
+                conn.close()
+            await ctx.send(f"```ansi\nPomyślnie przeteleportowano armię '{old[0][5]}' #{old[0][4]}.\n"
+                           f"\u001b[1;31m'{old[0][1]}' #{old[0][2]}\u001b[0;0m ➤ \u001b[1;32m'{new[1]}' #{new[0]}\u001b[0;0m```")
+            return
+
+        # this is where the fun begins
+        # the current location is old[4], but check for newest order
+        current_province = db.pax_engine.connect().execute(text(
+                f'SELECT target_province_id, province_name '
+                f'FROM movement_orders m '
+                f'INNER JOIN provinces p on m.target_province_id = p.province_id '
+                f'WHERE m.army_id = {old[0][4]} '
+                f'ORDER BY datetime DESC'
+            )).fetchone()
+        if not current_province:
+            current_province = [old[0][2], old[0][3]]
+
+        # get the border type
+        print(current_province[0], new[0])
+        border_type = db.pax_engine.connect().execute(text(
+            f'SELECT border_type FROM borders '
+            f'WHERE (province_id = {current_province[0]} AND province_id_2 = {new[0]}) '
+            f'OR (province_id_2 = {current_province[0]} AND province_id = {new[0]})'
+        )).fetchone()
+        if not border_type:
+            await ctx.send(f"```ansi\nNie ma granicy pomiędzy \u001b[0;31m'{current_province[1]}' #{current_province[0]}\u001b[0;0m "
+                           f"i \u001b[0;32m'{new[1]}' #{new[0]}\u001b[0;0m.```")
+            return
+        if border_type[0] == 0:
+            await ctx.send(f"```ansi\nNie możesz wejść na \u001b[0;31mWasteland\u001b[0;0m.```")
+            return
+        print(old)
+        movements = set([moves[3] for moves in old])
+        for move in movements:
+            if border_type[0] > move:
+                await ctx.send(f"```ansi\nArmia ma za mało ruchów."
+                               f"\nPrzynajmniej jedna jednostka ma \u001b[0;31m{move}\u001b[0;0m, "
+                               f"a potrzebne jest \u001b[0;32m{border_type[0]}\u001b[0;0m.```")
+                return
+
+        # remove movement and add order
+        with db.pax_engine.connect() as conn:
+            conn.begin()
+            conn.execute(text(f'UPDATE armies SET army_movement_left = army_movement_left - {border_type[0]} '
+                              f'WHERE army_id = {old[4][0]}'))
+            conn.execute(text(f'INSERT INTO movement_orders (army_id, target_province_id) '
+                              f'VALUES ({old[0][4]} ,{new[0]})'))
+            conn.commit()
+            conn.close()
+
+        await ctx.send(f"```ansi\nPomyślnie dodano rozkaz ruchu dla armii '{old[0][5]}' #{old[0][4]}.\n"
+                       f"\u001b[1;31m'{current_province[1]}' #{current_province[0]}\u001b[0;0m ➤ \u001b[1;32m'{new[1]}' #{new[0]}\u001b[0;0m```")
+        return
 
 """
     @interactions.extension_command(

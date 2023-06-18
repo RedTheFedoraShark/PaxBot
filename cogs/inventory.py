@@ -93,7 +93,7 @@ class Inventory(interactions.Extension):
         else:
             admin = False
             query = db.pax_engine.connect().execute(text(
-                f'SELECT item_id, item_name FROM  countries NATURAL JOIN inventories NATURAL JOIN items '
+                f'SELECT item_id, item_name FROM countries NATURAL JOIN inventories NATURAL JOIN items '
                 f'WHERE country_id = {country_id[0]} AND NOT quantity <= 0')).fetchall()
 
         index = 0

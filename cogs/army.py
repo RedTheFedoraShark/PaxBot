@@ -144,11 +144,17 @@ class Army(interactions.Extension):
                 f'SELECT {keyword}_id, {keyword}_name, country_id, country_name FROM armies NATURAL JOIN countries '
                 f'WHERE {keyword}_id = "{nazwa[1:]}"'
             )).fetchone()
+            if not old:
+                await ctx.send(f"```ansi\nProwincja o ID #{nazwa[1:]} \u001b[0;31mnie istnieje\u001b[0;0m.```")
+                return
         else:
             old = db.pax_engine.connect().execute(text(
                 f'SELECT {keyword}_id, {keyword}_name, country_id, country_name FROM armies NATURAL JOIN countries '
                 f'WHERE {keyword}_name = "{nazwa}"'
             )).fetchone()
+            if not old:
+                await ctx.send(f"```ansi\nProwincja o nazwie {nazwa} \u001b[0;31mnie istnieje\u001b[0;0m.```")
+                return
 
         # Errors
         if not old:
@@ -184,10 +190,10 @@ class Army(interactions.Extension):
                        f"\u001b[1;31m'{old[1]}'\u001b[0;0m ➤ \u001b[1;32m'{nowa_nazwa}'\u001b[0;0m```")
 
     @army.subcommand(description="Dodaje rozkazy ruchu armii.")
-    @interactions.option(name='nazwa', description='Nazwa/ID armii.')
+    @interactions.option(name='armia', description='Nazwa/ID armii.')
     @interactions.option(name='granica', description='Do której prowincji chcesz ruszyć?')
     @interactions.option(name='admin', description='Jesteś admin?')
-    async def move(self, ctx: interactions.CommandContext, nazwa: str, granica: str, admin: str = ''):
+    async def move(self, ctx: interactions.CommandContext, armia: str, granica: str, admin: str = ''):
         await ctx.defer()
 
         # set up basic variables
@@ -195,25 +201,25 @@ class Army(interactions.Extension):
             f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
         )).fetchone()[0]
 
-        if nazwa.startswith('#'):
+        if armia.startswith('#'):
             old = db.pax_engine.connect().execute(text(
                 f'SELECT c.country_id, province_name, p.province_id, army_movement_left, a.army_id, a.army_name '
                 f'FROM armies a NATURAL JOIN countries c '
                 f'INNER JOIN provinces p ON a.province_id = p.province_id '
-                f'WHERE army_id = "{nazwa[1:]}" AND c.country_id = {country_id}'
+                f'WHERE army_id = "{armia[1:]}" AND c.country_id = {country_id}'
             )).fetchall()
             if not old:
-                await ctx.send(f"```ansi\n\u001b[0;31mNie posiadasz\u001b[0;0m armii o ID #{nazwa[1:]}.```")
+                await ctx.send(f"```ansi\n\u001b[0;31mNie posiadasz\u001b[0;0m armii o ID #{armia[1:]}.```")
                 return
         else:
             old = db.pax_engine.connect().execute(text(
                 f'SELECT c.country_id, province_name, p.province_id, army_movement_left, a.army_id, a.army_name  '
                 f'FROM armies a NATURAL JOIN countries c '
                 f'INNER JOIN provinces p ON a.province_id = p.province_id '
-                f'WHERE army_name = "{nazwa}" AND c.country_id = {country_id}'
+                f'WHERE army_name = "{armia}" AND c.country_id = {country_id}'
             )).fetchall()
             if not old:
-                await ctx.send(f"```ansi\n\u001b[0;31mNie posiadasz\u001b[0;0m armii o nazwie '{nazwa}'.```")
+                await ctx.send(f"```ansi\n\u001b[0;31mNie posiadasz\u001b[0;0m armii o nazwie '{armia}'.```")
                 return
 
         if granica.startswith('#'):
@@ -236,7 +242,6 @@ class Army(interactions.Extension):
         # simply make an exception for admins and forget about it
         if admin != '' and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
             # teleport
-            print("test")
             with db.pax_engine.connect() as conn:
                 conn.begin()
                 conn.execute(text(f'UPDATE armies SET province_id = {new[0]} '
@@ -286,15 +291,78 @@ class Army(interactions.Extension):
         with db.pax_engine.connect() as conn:
             conn.begin()
             conn.execute(text(f'UPDATE armies SET army_movement_left = army_movement_left - {border_type[0]} '
-                              f'WHERE army_id = {old[4][0]}'))
-            conn.execute(text(f'INSERT INTO movement_orders (army_id, target_province_id) '
-                              f'VALUES ({old[0][4]} ,{new[0]})'))
+                              f'WHERE army_id = {old[0][4]}'))
+            conn.execute(text(f'INSERT INTO movement_orders (army_id, origin_province_id, target_province_id) '
+                              f'VALUES ({old[0][4]}, {current_province[0]}, {new[0]})'))
             conn.commit()
             conn.close()
 
         await ctx.send(f"```ansi\nPomyślnie dodano rozkaz ruchu dla armii '{old[0][5]}' #{old[0][4]}.\n"
                        f"\u001b[1;31m'{current_province[1]}' #{current_province[0]}\u001b[0;0m ➤ \u001b[1;32m'{new[1]}' #{new[0]}\u001b[0;0m```")
         return
+
+    @army.subcommand(description="Wyświetla rozkazy armii.")
+    @interactions.option(name='typ', description='Które rozkazy chcesz wyświetlić?',
+                         choices=[interactions.Choice(name="recruit", value="recruit"),
+                                  interactions.Choice(name="reinforce", value="reinforce"),
+                                  interactions.Choice(name="move", value="move")])
+    @interactions.option(name='admin', description='Jesteś admin?')
+    async def orders(self, ctx: interactions.CommandContext, typ: str, admin: str = ''):
+
+        if admin != '' and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            admin_bool = True
+            if admin.startswith('<@') and admin.endswith('>'):  # if a ping
+                country_id = db.pax_engine.connect().execute(text(
+                    f'SELECT country_id FROM players NATURAL JOIN countries '
+                    f'WHERE player_id = {admin[2:-1]}')).fetchone()
+            else:
+                country_id = db.pax_engine.connect().execute(text(
+                    f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{admin}"'
+                )).fetchone()
+        else:
+            admin_bool = False
+            country_id = db.pax_engine.connect().execute(text(
+                f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
+            )).fetchone()
+
+        if typ == "army":
+            return
+        elif typ == "reinforce":
+            return
+        else:  # move
+
+            if admin_bool and not country_id:
+                country_id = ["%"]
+
+            move_orders = db.pax_engine.connect().execute(text(
+                f'SELECT mo.order_id, a.army_name, a.army_id, a.unit_name, a.unit_id, '
+                f'p1.province_name, p1.province_id, p2.province_name, p2.province_id, mo.datetime '
+                f'FROM movement_orders mo NATURAL JOIN armies a '
+                f'INNER JOIN provinces p1 ON mo.origin_province_id = p1.province_id '
+                f'INNER JOIN provinces p2 ON mo.target_province_id = p2.province_id '
+                f'WHERE a.country_id = {country_id[0]} '
+                f'ORDER BY datetime, order_id, army_id, unit_id ')).fetchall()
+
+            if not move_orders:
+                await ctx.send(f"```ansi\nTen kraj nie ma rozkazów ruchu dla armii.[0;0m.```")
+                return
+
+            embeds = await models.build_army_order_move(country_id)
+            if len(embeds) == 1:
+                await ctx.send(embeds=embeds[0])
+                return
+            pages = []
+            for e in embeds:
+                page = Page(embeds=e)
+                pages.append(page)
+            await Paginator(
+                client=self.bot,
+                ctx=ctx,
+                author_only=True,
+                timeout=600,
+                message="test",
+                pages=pages
+            ).run()
 
 """
     @interactions.extension_command(

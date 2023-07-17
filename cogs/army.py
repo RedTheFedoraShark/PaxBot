@@ -115,11 +115,118 @@ class Army(interactions.Extension):
                     pages=pages
                 ).run()
 
+    @army.subcommand(description="Rekrutuje jednostki.")
+    @interactions.option(name='prowincja', description='Nazwa/ID prowincji.')
+    @interactions.option(name='jednostka', description='Nazwa/ID szablonu jednostki.')
+    @interactions.option(name='nazwa_jednostki', description='Nazwa nowej jednostki.')
+    @interactions.option(name='nazwa_armii', description='Nazwa nowej armii.')
+    @interactions.option(name='admin', description='Jesteś admin?')
+    async def recruit(self, ctx: interactions.CommandContext, prowincja: str, jednostka: str,
+                      nazwa_jednostki: str = '', nazwa_armii: str = '', admin: str = ''):
+        await ctx.defer()
+
+        if admin != '' and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            if admin.startswith('<@') and admin.endswith('>'):  # if a ping
+                country_id = db.pax_engine.connect().execute(text(
+                    f'SELECT country_id FROM players NATURAL JOIN countries '
+                    f'WHERE player_id = {admin[2:-1]}')).fetchone()[0]
+            else:
+                country_id = db.pax_engine.connect().execute(text(
+                    f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{admin}"'
+                )).fetchone()[0]
+        else:
+            country_id = db.pax_engine.connect().execute(text(
+                f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
+            )).fetchone()[0]
+
+        if prowincja.startswith('#'):
+            prov = db.pax_engine.connect().execute(text(
+                f'SELECT p.province_id, p.province_name '
+                f'FROM provinces p '
+                f'WHERE province_id = "{prowincja[1:]}" AND p.country_id = {country_id} '
+                f'AND p.controller_id = {country_id}'
+            )).fetchone()
+            if not prov:
+                await ctx.send(f"```ansi\n\u001b[0;31mNie kontrolujesz\u001b[0;0m w pełni prowincji o ID #{prowincja[1:]}.```")
+                return
+        else:
+            prov = db.pax_engine.connect().execute(text(
+                f'SELECT p.province_id, p.province_name '
+                f'FROM provinces p '
+                f'WHERE province_id = "{nprowincja}" AND p.country_id = {country_id} '
+                f'AND p.controller_id = {country_id}'
+            )).fetchone()
+            if not prov:
+                await ctx.send(
+                    f"```ansi\n\u001b[0;31mNie kontrolujesz\u001b[0;0m w pełni prowincji o nazwie {prowincja}.```")
+                return
+
+        if jednostka.startswith('#'):
+            unit = db.pax_engine.connect().execute(text(
+                f'SELECT u.unit_template_id, u.unit_name '
+                f'FROM units u '
+                f'WHERE u.unit_template_id = "{jednostka[1:]}" AND u.country_id = {country_id}'
+            )).fetchone()
+            if not unit:
+                await ctx.send(f"```ansi\nTwoje państwo \u001b[0;31mnie ma\u001b[0;0m szablonu jednostki o o ID #{jednostka[1:]}.```")
+                return
+        else:
+            unit = db.pax_engine.connect().execute(text(
+                f'SELECT u.unit_template_id, u.unit_name '
+                f'FROM units u '
+                f'WHERE u.unit_name = "{jednostka}" AND u.country_id = {country_id}'
+            )).fetchone()
+            if not unit:
+                await ctx.send(
+                    f"```ansi\nTwoje państwo \u001b[0;31mnie ma\u001b[0;0m szablonu jednostki o nazwie {jednostka}.```")
+                return
+
+
+
+        # Common Errors
+        if len(nazwa_jednostki) > 20:
+            await ctx.send(f"```ansi\nNazwa jednostki nie może mieć więcej niż \u001b[0;32m20\u001b[0;0m znaków!\n"
+                           f"Nazwa '{nazwa_jednostki}' ma ich \u001b[0;31m{len(nazwa_jednostki)}\u001b[0;0m.```")
+            return
+        if len(nazwa_armii) > 20:
+            await ctx.send(f"```ansi\nNazwa armii nie może mieć więcej niż \u001b[0;32m20\u001b[0;0m znaków!\n"
+                           f"Nazwa '{nazwa_armii}' ma ich \u001b[0;31m{len(nazwa_armii)}\u001b[0;0m.```")
+            return
+        unit_names = db.pax_engine.connect().execute(text(
+            f'SELECT unit_name FROM armies WHERE country_id = {country_id}'
+        )).fetchall()
+        unit_names = [item for sublist in unit_names for item in sublist]
+        if nazwa_jednostki in unit_names:
+            await ctx.send(f"```ansi\nMoże być tylko jedna jednostka z daną nazwą!\n```")
+            return
+        army_names = db.pax_engine.connect().execute(text(
+            f'SELECT army_name FROM armies WHERE country_id = {country_id}'
+        )).fetchall()
+        army_names = [item for sublist in army_names for item in sublist]
+        if nazwa_armii in army_names:
+            await ctx.send(f"```ansi\nMoże być tylko jedna armia z daną nazwą!\n```")
+            return
+
+        # simply make an exception for admins and forget about it
+        if admin != '' and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            # teleport
+            with db.pax_engine.connect() as conn:
+                conn.begin()
+                conn.execute(text(f'INSERT INTO armies (unit_template_id, country_id, province_id, army_id, army_visible) '
+                                  f'VALUES '))
+                conn.commit()
+                conn.close()
+            await ctx.send(f"```ansi\nPomyślnie zespawnowano jednostkę '{old[0][5]}' #{old[0][4]}.\n"
+                           f"\u001b[1;31m'{old[0][1]}' #{old[0][2]}\u001b[0;0m ➤ \u001b[1;32m'{new[1]}' #{new[0]}\u001b[0;0m```")
+            return
+
+        # Player Errors
+
     @army.subcommand(description="Zmienia nazwę jednostki lub armii państwa.")
     @interactions.option(name='typ', description='Czemu chcesz zmienić nazwę?',
                          choices=[interactions.Choice(name="Armia", value="army"),
                                   interactions.Choice(name="Jednostka", value="unit")])
-    @interactions.option(name='nazwa', description='Nazwa/ID starej wojska.')
+    @interactions.option(name='nazwa', description='Stara nazwa/ID wojska.')
     @interactions.option(name='nowa_nazwa', description='Nowa nazwa wojska.')
     async def rename(self, ctx: interactions.CommandContext, typ: str, nazwa: str, nowa_nazwa: str):
         await ctx.defer()
@@ -157,11 +264,8 @@ class Army(interactions.Extension):
                 return
 
         # Errors
-        if not old:
-            await ctx.send(f"```ansi\nPomyślnie zmieniono nazwę {second} #{old[0]}.\n"
-                           f"\u001b[1;31m'{old[1]}'\u001b[0;0m ➤ \u001b[1;32m'{nowa_nazwa}'\u001b[0;0m```")
         if len(nowa_nazwa) > 20:
-            await ctx.send(f"```ansi\nNazwa {second} nie może mieć więcej niż \u001b[0;32m17\u001b[0;0m znaków!\n"
+            await ctx.send(f"```ansi\nNazwa {second} nie może mieć więcej niż \u001b[0;32m20\u001b[0;0m znaków!\n"
                            f"Nazwa '{nowa_nazwa}' ma ich \u001b[0;31m{len(nowa_nazwa)}\u001b[0;0m.```")
             return
         if '"' in nowa_nazwa:
@@ -197,16 +301,19 @@ class Army(interactions.Extension):
         await ctx.defer()
 
         # set up basic variables
-        country_id = db.pax_engine.connect().execute(text(
-            f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
-        )).fetchone()[0]
+        if admin != '' and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            country_id = "%"
+        else:
+            country_id = db.pax_engine.connect().execute(text(
+                f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
+            )).fetchone()[0]
 
         if armia.startswith('#'):
             old = db.pax_engine.connect().execute(text(
                 f'SELECT c.country_id, province_name, p.province_id, army_movement_left, a.army_id, a.army_name '
                 f'FROM armies a NATURAL JOIN countries c '
                 f'INNER JOIN provinces p ON a.province_id = p.province_id '
-                f'WHERE army_id = "{armia[1:]}" AND c.country_id = {country_id}'
+                f'WHERE army_id = "{armia[1:]}" AND c.country_id LIKE "{country_id}"'
             )).fetchall()
             if not old:
                 await ctx.send(f"```ansi\n\u001b[0;31mNie posiadasz\u001b[0;0m armii o ID #{armia[1:]}.```")
@@ -216,7 +323,7 @@ class Army(interactions.Extension):
                 f'SELECT c.country_id, province_name, p.province_id, army_movement_left, a.army_id, a.army_name  '
                 f'FROM armies a NATURAL JOIN countries c '
                 f'INNER JOIN provinces p ON a.province_id = p.province_id '
-                f'WHERE army_name = "{armia}" AND c.country_id = {country_id}'
+                f'WHERE army_name = "{armia}" AND c.country_id LIKE {country_id}'
             )).fetchall()
             if not old:
                 await ctx.send(f"```ansi\n\u001b[0;31mNie posiadasz\u001b[0;0m armii o nazwie '{armia}'.```")

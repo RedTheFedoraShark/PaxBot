@@ -1007,3 +1007,7 @@ def bt_detail(building, connection):
         fields=[f1, f2]
     )
     return embed
+
+def bl_province():
+    embed = None
+    return embed

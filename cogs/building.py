@@ -23,7 +23,7 @@ class Template(interactions.Extension):
     @interactions.option(description='#Id lub nazwa prowincji')
     @interactions.option(description='Nazwa państwa lub ping')
     @interactions.option(description='Admin?')
-    async def list(self, ctx: interactions.CommandContext, province: str='', country: str='', admin:bool=False):
+    async def list(self, ctx: interactions.CommandContext, province: str = '', country: str = '', admin: bool = False):
         if admin and ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
             is_admin = True
         else:
@@ -33,6 +33,9 @@ class Template(interactions.Extension):
 
         province, country = province.strip(), country.strip()
 
+        ##
+        ## Check country variable
+        ##
         if country.startswith('<@') and country.endswith('>'): # if a ping
             # id = panstwo[2:-1]
             result = connection.execute(
@@ -50,19 +53,23 @@ class Template(interactions.Extension):
                 return
         else:
             country = connection.execute(
-                text(f'SELECT country_id from players NATURAL JOIN countries WHERE player_id = {ctx.author.id};')).fetchone()[0]
+                text(f'SELECT country_id from players NATURAL JOIN countries WHERE player_id = {ctx.author.id};')).fetchone()
             if country is None:
                 if not is_admin:
                     await ctx.send('Nie masz przypisanego państwa!')
-                else:
-                    await ctx.send('Państwo nie może być puste!')
+                elif province == '':
+                    await ctx.send('Państwo nie może być puste gdy nie ma podanej prowincji!')
                 return
+            country = country[0]
 
+        ###
+        ### Check province variable
+        ###
         if province[0] == '#':
             result = connection.execute(
                 text(f'SELECT province_id FROM provinces WHERE province_id = {province[1:]};')).fetchone()
             if result is None:
-                await ctx.send('Dupa')
+                await ctx.send('Nieprawidłowe id prowincji!')
                 return
             province = result[0]
         elif province != '':
@@ -72,18 +79,39 @@ class Template(interactions.Extension):
                 await ctx.send('Pojebało cię dziewczynko')
                 return
 
+        ###
+        ### Get specific info based on variables
+        ### First check for province
+        ### Then check for country
+        ###
         if is_admin:
             if province != '':
                 result = connection.execute(
-                    text(f'SELECT province_id, province_name, building_name'))
+                    text(f'SELECT building_name '
+                         f'FROM provinces NATURAL JOIN structures '
+                         f'WHERE province_id = {province} '
+                         f'ORDER BY building_name ASC;')).fetchall()
 
             elif country != '':
+                result = connection.execute(
+                    text(f'SELECT province_id, province_name, building_name '
+                         f'FROM provinces NATURAL JOIN structures '
+                         f'WHERE country_id = {country}'
+                         f'ORDER BY province_id, building name ASC;')).fetchall()
         else:
+            if province != '':
+                visible = connection.execute(
+                    text(f'SELECT province_id FROM armies WHERE country_id = {country}'
+                         f'UNION'
+                         f'SELECT province_id FROM provinces WHERE controller_id = {country};')).fetchall()
+                print(visible)
+                # visibility check
+                # neighbour_visible = connection.execute(
+                #     text(f'SELECT province_id FROM borders WHERE province_id = {province}'
+                #          f'UNION'
+                #          f'SELECT province_id_2 FROM borders WHERE province_id_2 = {province}'))
+
             pass
-
-
-
-
         return
 
     @building.subcommand(description='Lista twoich szablonów budynków')
@@ -180,10 +208,10 @@ class Template(interactions.Extension):
         connection.close()
         return
 
-    @building.subcommand(description='')
+    @building.subcommand(description='a')
     async def destroy(self):
         return
 
-    @building.subcommand(description='')
+    @building.subcommand(description='b')
     async def upgrade(self):
         return

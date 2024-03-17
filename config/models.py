@@ -1,8 +1,474 @@
 import random
-import pandas
+import pandas as pd
 import interactions
+import re
 from database import *
 from sqlalchemy import text
+from interactions.ext.paginator import Page
+
+
+# Pagify a table string
+async def pagify(dataframe: list):
+    bit = ''
+    bits = []
+    for i, line in enumerate(dataframe):
+        if len(bit) > 1860 or i == len(dataframe) - 1:
+            bits.append(bit)
+            bit = ''
+        bit = f"{bit}\n{line}"
+    pages = []
+    for i, bit in enumerate(bits):
+        pages.append(Page(title=str(i+1) + ". Strona", content=f"```ansi\n{bit}```"))
+    return pages
+
+
+# Build an army info table as tabulated strings and return them as a list of strings
+# Input is a list of lists of required fields
+# Also country_id for checking invisible units
+async def build_army_info(query, country_id):
+    table_list = []
+    indexes = [7, 33, 52, 85, 97, 142, 187, 212, 232]
+    template = list("""Armia: $                         $          
+Jdnst: $                         Ruchy: $   
+Typ:   $                                    
+Kraj:  $                        Liczebność: 
+Prwnc: $                        $           
+Pchdz: $""")
+    for unit in query:
+        # |    7        |33 |        52       |   85  |      97     |    142   |   |  187       |    212    |   232    |
+        # | Armia 1 | 1 | 1 | Wojownicy 1 | 1 | 1 | 1 | Templat | 1 | Karbadia | 1 | Test2 | 52 | 100 | 100 |Kanonia|50|
+        aname, aid, vis, uname, uid, lmoves, moves, tname, tid, cname, cid, pname, pid, quan, astr, oname, oid = unit
+
+        if not (country_id == 0 or country_id == cid) and vis == 0:
+            pass
+        elif (country_id == 0 or country_id == cid) and vis == 0:
+            vis = "Niewidoczny"
+        else:
+            vis = "Widoczny"
+
+        new_field = list("""Armia: $                         $          
+Jdnst: $                         Ruchy: $   
+Typ:   $                                    
+Kraj:  $                        Liczebność: 
+Prwnc: $                        $           
+Pchdz: $""")
+
+        word_list = [f"{aname} #{aid}", f"{vis}", f"{uname} #{uid}", f"{lmoves}/{moves}", f"{tname} #{tid}",
+                     f"{cname}", f"{pname} #{pid}", f"{int(quan/100*astr)}/{quan} {astr}%", f"{oname} #{oid}"]
+
+        for n, i in enumerate(indexes):
+            new_field[indexes[n]: indexes[n] + len(word_list[n])] = list(word_list[n])
+
+        table_list.append(''.join(new_field))
+    print(table_list)
+    return table_list
+
+
+# /army list
+async def build_army_list(country_id: int):
+    connection = db.pax_engine.connect()
+    table = connection.execute(text(
+          f"""SELECT 
+              a.army_name, 
+              a.army_id, 
+              a.unit_name, 
+              a.unit_id, 
+              ut.unit_name, 
+              ut.unit_template_id, 
+              uc.item_quantity, 
+              a.army_strenght, 
+              a.province_id, 
+              a.army_movement_left, 
+              ut.unit_movement 
+            FROM 
+              armies a 
+              INNER JOIN units ut ON a.unit_template_id = ut.unit_template_id 
+              INNER JOIN units_cost uc ON a.unit_template_id = uc.unit_template_id 
+            WHERE 
+              uc.item_id = 3 
+              AND a.country_id = {country_id};
+          """)).fetchall()
+
+    df = pd.DataFrame(table, columns=[
+        'aname', 'aid', 'uname', 'uid', 'utname', 'utid', 'qua', 'str', 'pid', 'aml', 'um'])
+    df = df.sort_values(by=['aid', 'uid'])
+    df2 = pd.DataFrame(columns=[
+        'Armia (ID)', 'Jednostka (ID)', 'Typ Jednostki (ID)', 'Liczebność', 'Prwnc', 'Ruch'])
+    for i, row in df.iterrows():
+        army = f"{row[0]} ({row[1]})"
+        unit = f"{row[2]} ({row[3]})"
+        template = f"{row[4]} ({row[5]})"
+        quantity = f"{int(row[6] / 100 * row[7])}/{row[6]} {row[7]}%"
+        province = f"#{row[8]}"
+        movement = f"{row[9]}/{row[10]}"
+        df2.loc[f'{i}'] = [army, unit, template, quantity, province, movement]
+
+    return df2
+
+
+async def build_army_list_admin():
+    connection = db.pax_engine.connect()
+    table = connection.execute(text(
+          f"""SELECT 
+              a.army_name, 
+              a.army_id, 
+              a.unit_name, 
+              a.unit_id, 
+              ut.unit_name, 
+              ut.unit_template_id, 
+              uc.item_quantity, 
+              a.army_strenght, 
+              a.province_id, 
+              a.army_movement_left, 
+              ut.unit_movement 
+            FROM 
+              armies a 
+              INNER JOIN units ut ON a.unit_template_id = ut.unit_template_id 
+              INNER JOIN units_cost uc ON a.unit_template_id = uc.unit_template_id 
+            WHERE 
+              uc.item_id = 3;
+          """)).fetchall()
+
+    df = pd.DataFrame(table, columns=[
+        'aname', 'aid', 'uname', 'uid', 'utname', 'utid', 'qua', 'str', 'pid', 'aml', 'um'])
+    df = df.sort_values(by=['aid'])
+    df2 = pd.DataFrame(columns=[
+        'Armia (ID)', 'Jednostka (ID)', 'Typ Jednostki (ID)', 'Liczebność', 'Prwnc', 'Ruch'])
+    for i, row in df.iterrows():
+        army = f"{row[0]} ({row[1]})"
+        unit = f"{row[2]} ({row[3]})"
+        template = f"{row[4]} ({row[5]})"
+        quantity = f"{int(row[6] / 100 * row[7])}/{row[6]} {row[7]}%"
+        province = f"#{row[8]}"
+        movement = f"{row[9]}/{row[10]}"
+        df2.loc[f'{i}'] = [army, unit, template, quantity, province, movement]
+
+    return df2
+
+
+# /army order
+async def build_army_order_move(country_id):
+    move_orders = db.pax_engine.connect().execute(text(
+        f'SELECT mo.order_id, a.army_name, a.army_id, a.unit_name, a.unit_id, '
+        f'p1.province_name, p1.province_id, p2.province_name, p2.province_id, mo.datetime '
+        f'FROM movement_orders mo NATURAL JOIN armies a '
+        f'INNER JOIN provinces p1 ON mo.origin_province_id = p1.province_id '
+        f'INNER JOIN provinces p2 ON mo.target_province_id = p2.province_id '
+        f'WHERE a.country_id = {country_id[0]} '
+        f'ORDER BY datetime, order_id, army_id, unit_id ')).fetchall()
+
+    d = {}
+    o = {}
+    for x in move_orders:
+        if x[2] not in d:
+            d[x[2]] = []
+            o[x[2]] = []
+        if x[4] not in [t[4] for t in d[x[2]]]:
+            d[x[2]].append(x)
+        if x[0] not in [u[0] for u in o[x[2]]]:
+            o[x[2]].append([x[0]] + list(x[5:10]))
+
+    strings = []
+    for x in d:
+        s = '\u001b[1;37mJednostki:\u001b[0;0m\n'
+
+        title = f"{d[x][0][1]} #{d[x][0][2]}"
+        for y in d[x]:
+            z = '   •' + f'{y[3].ljust(20)} #{y[4]}' + '\n'
+            s = f"{s}{z}"
+        s = s + '\n'
+        for y in o[x]:
+            z = f"\u001b[1;37mRozkaz #{str(y[0]).ljust(4)}{y[5]}\u001b[0;0m\n" \
+                f"\u001b[0;31mZ : {y[1].ljust(20)} #{y[2]}\u001b[0;0m\n" \
+                f"\u001b[0;32mDo: {y[3].ljust(20)} #{y[4]}\u001b[0;0m\n"
+            s = f"{s}{z}"
+            # \u001b[0;32m  \u001b[0;0m
+
+        strings.append((title, s))
+    embeds = []
+    fields = []
+    for x in strings:
+        f = interactions.EmbedField(name=x[0], value=f"```ansi\n{x[1]}```", inline=False)
+        if len(fields) > 20:
+            embed = interactions.Embed(
+                title=f"Rozkazy ruchu armii.",
+                fields=fields)
+            embeds.append(embed)
+            fields = []
+        fields.append(f)
+
+    if fields:
+        embed = interactions.Embed(
+            title=f"Rozkazy ruchu armii.",
+            fields=fields)
+        embeds.append(embed)
+
+    return embeds
+
+
+# /province list
+async def build_province_list(country_id: int):
+    connection = db.pax_engine.connect()
+    table = connection.execute(text(
+        f"""
+        SELECT 
+  CONCAT(
+    p.province_name, ' \u001b[0;30m(', 
+    p.province_id, ')\u001b[0;0m'
+  ), 
+  r.region_name, 
+  t.terrain_name, 
+  g.good_name, 
+  re.religion_name, 
+  CONCAT(
+    p.province_pops, 
+    '(', 
+    IFNULL(
+      SUM(s.quantity * b.building_workers), 
+      0
+    ), 
+    ')/', 
+    pl.province_pops_limit
+  ), 
+  c.country_id, 
+  cc.country_id 
+FROM 
+  provinces p NATURAL 
+  JOIN regions r NATURAL 
+  JOIN goods g NATURAL 
+  JOIN terrains t NATURAL 
+  JOIN religions re 
+  INNER JOIN countries c ON p.country_id = c.country_id 
+  INNER JOIN countries cc ON p.controller_id = cc.country_id 
+  LEFT JOIN structures s ON p.province_id = s.province_id 
+  LEFT JOIN buildings b ON s.building_id = b.building_id 
+  LEFT JOIN province_levels pl ON p.province_level = pl.province_level 
+WHERE 
+  p.country_id = {country_id} 
+  OR p.controller_id = {country_id} 
+GROUP BY 
+  p.province_id 
+ORDER BY 
+  p.province_id;
+        """
+    )).fetchall()
+
+    df = pd.DataFrame(table, columns=[
+        'Prowincja (ID)', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Status', 'Status2'])
+    for i, row in df.iterrows():
+        if df.at[i, 'Status'] == df.at[i, 'Status2']:
+            print(type(df.at[i, 'Status']))
+            print(type(country_id))
+            df.at[i, 'Status'] = f"\u001b[0;32mKontrola\u001b[0;0m"
+        elif df.at[i, 'Status2'] == country_id:
+            df.at[i, 'Status'] = f"\u001b[0;33mOkupacja\u001b[0;0m"
+        elif df.at[i, 'Status'] == country_id:
+            df.at[i, 'Status'] = f"\u001b[0;31mOkupacja\u001b[0;0m"
+    df.drop(['Status2'], axis=1, inplace=True)
+    return df
+
+
+async def build_province_list_admin():
+    connection = db.pax_engine.connect()
+    table = connection.execute(text(
+        f"""
+        SELECT 
+  CONCAT(
+    p.province_name, ' \u001b[0;30m(', 
+    p.province_id, ')\u001b[0;0m'
+  ), 
+  r.region_name, 
+  t.terrain_name, 
+  g.good_name, 
+  re.religion_name, 
+  CONCAT(
+    p.province_pops, 
+    '(', 
+    IFNULL(
+      SUM(s.quantity * b.building_workers), 
+      0
+    ), 
+    ')/', 
+    pl.province_pops_limit
+  ), 
+  c.country_id, 
+  cc.country_id 
+FROM 
+  provinces p NATURAL 
+  JOIN regions r NATURAL 
+  JOIN goods g NATURAL 
+  JOIN terrains t NATURAL 
+  JOIN religions re 
+  INNER JOIN countries c ON p.country_id = c.country_id 
+  INNER JOIN countries cc ON p.controller_id = cc.country_id 
+  LEFT JOIN structures s ON p.province_id = s.province_id 
+  LEFT JOIN buildings b ON s.building_id = b.building_id 
+  LEFT JOIN province_levels pl ON p.province_level = pl.province_level 
+WHERE 
+  p.province_id BETWEEN 1 AND 251 
+GROUP BY 
+  p.province_id 
+ORDER BY 
+  p.province_id;
+        """)).fetchall()
+
+    df = pd.DataFrame(table, columns=[
+        'Prowincja (ID)', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Status', 'Status2'])
+    for i, row in df.iterrows():
+        print(df.at[i, 'Status'])
+        if df.at[i, 'Status'] == 255:
+            df.at[i, 'Status'] = f"\u001b[0;34mPuste\u001b[0;0m"
+        elif df.at[i, 'Status'] == df.at[i, 'Status2']:
+            df.at[i, 'Status'] = f"\u001b[0;32mKontrola\u001b[0;0m"
+        else:
+            df.at[i, 'Status'] = f"\u001b[0;31mOkupacja\u001b[0;0m"
+    df.drop(['Status2'], axis=1, inplace=True)
+    return df
+
+
+async def build_province_embed(province_id: int, country_id: int):
+    embeds = []
+    connection = db.pax_engine.connect()
+    province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name, cid1, cn1, cid2, cn2 = connection.execute(text(
+        f'SELECT province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name, '
+        f'c.country_id, c.country_name, cc.country_id, cc.country_name '
+        f'FROM provinces p NATURAL JOIN religions '
+        f'NATURAL JOIN terrains NATURAL JOIN goods '
+        f'NATURAL JOIN regions '
+        f"INNER JOIN countries c ON p.country_id = c.country_id "
+        f"INNER JOIN countries cc ON p.controller_id = cc.country_id "
+        f'WHERE province_id = {province_id}'
+    )).fetchone()
+    if country_id == 0:
+        country_id = cid1
+    if not good_name:
+        good_name = "-"
+    pops = connection.execute(text(
+        f'SELECT SUM(province_pops) FROM provinces WHERE province_id = "{province_id}"')).fetchone()[0]
+    workers = connection.execute(text(
+        f'SELECT SUM(building_workers) FROM provinces NATURAL JOIN structures NATURAL JOIN buildings '
+        f'WHERE province_id = {province_id}')).fetchone()[0]
+    workers = workers if workers is not None else 0
+    conscripted = connection.execute(text(f"SELECT SUM(unit_manpower) FROM armies NATURAL JOIN units "
+                                          f"LEFT JOIN provinces ON armies.province_id = provinces.province_id "
+                                          f"WHERE armies.army_origin = {province_id}")).fetchone()[0]
+    conscripted = conscripted if conscripted is not None else 0
+    pop_field = pd.DataFrame([['Mieszkańcy:', f'{pops}'],
+                              ['Pracujący:',  f'{workers} ({int(int(workers) / int(pops) * 100)}%)'],
+                              ['Powołani:',   f'{conscripted}']], columns=['1234567890', '1234567890123456789012345'])
+    pop_field = pop_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
+    pop_field = re.sub('..\\n..', '\n', pop_field)
+    pop_field = pop_field.replace(' |', ' ')
+    if cid1 == country_id:
+        cn1 = f"\u001b[0;32m{cn1}\u001b[0;0m"
+    else:
+        cn1 = f"\u001b[0;31m{cn1}\u001b[0;0m"
+    if cid2 == country_id:
+        cn2 = f"\u001b[0;32m{cn2}\u001b[0;0m"
+    else:
+        cn2 = f"\u001b[0;31m{cn2}\u001b[0;0m"
+    status_field = pd.DataFrame([['Właściciel:', f'{cn1}'],
+                                ['Kontroler:',   f'{cn2}']],
+                                columns=['1234567890', '1234567890123456789012345'])
+    status_field = status_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
+    status_field = re.sub('..\\n..', '\n', status_field)
+    status_field = status_field.replace(' |', ' ')
+
+    ## Creating embed elements
+    #embed_footer = interactions.EmbedFooter(
+    #    text=query[13],
+    #    icon_url=query[14]
+    #)
+    #embed_thumbnail = interactions.EmbedImageStruct(
+    #    url=query[12]
+    #)
+    #embed_author = interactions.EmbedAuthor(
+    #    name=query[3],
+    #)
+    f0 = interactions.EmbedField(name="", value="", inline=False)
+    f1 = interactions.EmbedField(name="Region", value=f"```{region_name}```", inline=True)
+    f2 = interactions.EmbedField(name="Teren", value=f"```{terrain_name}```", inline=True)
+    f3 = interactions.EmbedField(name="Religia", value=f"```{religion_name}```", inline=True)
+    f4 = interactions.EmbedField(name="Zasoby", value=f"```{good_name}```", inline=True)
+    f5 = interactions.EmbedField(name="Populacja", value=f"```{pop_field[2:-2]}```", inline=False)
+    f6 = interactions.EmbedField(name="Status", value=f"```ansi\n{status_field[2:-2]}```", inline=False)
+    f7 = interactions.EmbedField(name="Budynki", value=f"```ansi\nWORK IN PROGRESS```", inline=False)
+    f8 = interactions.EmbedField(name="Ekonomia", value=f"```ansi\nWORK IN PROGRESS```", inline=False)
+    f9 = interactions.EmbedField(name="Armie", value='', inline=False)
+    fields = [f1, f2, f0, f3, f4, f5, f6, f7, f8, f9]
+    armies = connection.execute(text(
+          f"""SELECT 
+              a.army_name, 
+              a.army_id, 
+              army_visible, 
+              a.unit_name, 
+              a.unit_id, 
+              a.army_movement, 
+              a.army_movement_left, 
+              a.unit_name,
+              a.unit_template_id, 
+              c.country_name, 
+              a.country_id, 
+              p1.province_name, 
+              a.province_id, 
+              uc.item_quantity, 
+              a.army_strenght, 
+              p2.province_name, 
+              a.army_origin 
+            FROM 
+              units u 
+              INNER JOIN armies a ON a.unit_template_id = u.unit_template_id 
+              INNER JOIN units_cost uc ON u.unit_template_id = uc.unit_template_id 
+              INNER JOIN provinces p1 ON a.province_id = p1.province_id 
+              INNER JOIN provinces p2 ON a.army_origin = p2.province_id 
+              INNER JOIN countries c ON a.country_id = c.country_id 
+            WHERE 
+              uc.item_id = 3
+            AND
+              a.province_id = {province_id}""")).fetchall()
+    print(armies)
+    a_fields = await build_army_info(armies, country_id)
+    army_fields = []
+    for army in a_fields:
+        army_fields.append(interactions.EmbedField(name="", value=f"```\n{army}```", inline=False))
+    print(len(army_fields))
+    if len(army_fields) <= 10:
+        first_fields = fields + army_fields
+    else:
+        first_fields = fields
+        for i, field in enumerate(army_fields):
+            if i < 10:
+                first_fields.append(field)
+                print(i)
+        temp_field = []
+        fields_table = []
+        for i in range(10, len(army_fields)):
+            if len(temp_field) < 24:
+                temp_field.append(army_fields[i])
+            else:
+                fields_table.append(temp_field)
+                temp_field = []
+        fields_table.append(temp_field)
+        for army_embed in fields_table:
+            embeds.insert(1, interactions.Embed(title=f"Armie w prowincji {province_name} (#{province_id})",
+
+                                                fields=[f7] + army_embed))
+
+    image = interactions.EmbedImageStruct(url=terrain_image_url)
+    # Building the Embed
+    embed = interactions.Embed(
+        #color=int(query[7], 16),
+        title=f"{province_name} (#{province_id})",
+        #url=query[11],
+        #footer=embed_footer,
+        #thumbnail=embed_thumbnail,
+        #author=embed_author,
+        fields=first_fields,
+        image=image
+    )
+    embeds.insert(0, embed)
+    connection.close()
+    return embeds
 
 
 # /info country
@@ -174,7 +640,6 @@ async def build_item_embed_talary(ctx, self, item_id: int, country_id: int, item
 
 
 async def build_item_embed(ctx, self, item_id: int, country_id: int):
-    print(item_id, country_id)
     # Get all info from database
     item_query = db.pax_engine.connect().execute(text(
         f'SELECT item_id, item_name, item_color, item_image_url, item_desc, quantity, item_good '
@@ -193,7 +658,6 @@ async def build_item_embed(ctx, self, item_id: int, country_id: int):
                 embed = await build_item_embed_talary(ctx, self, item_id, country_id, item_query)
             case _:
                 embed = await build_item_embed_good(ctx, self, item_id, country_id, item_query)
-    print(item_query)
     return embed
 
 
@@ -377,8 +841,6 @@ def ic_map():
                                                       f"\nReligie wasze i nasze."
                                                       f"\n\u001b[0;31m•Populacji\u001b[0;0m"
                                                       f"\nPopulacje prowincji."
-                                                      f"\n\u001b[0;31m•Autonomii\u001b[0;0m"
-                                                      f"\nAutnomie prowincji."
                                                       f"\n\u001b[0;31m•Pusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
     f2 = interactions.EmbedField(name="[kontury]", value=f"```ansi"
@@ -402,7 +864,7 @@ def ic_map():
     f4 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
                                                        f"\u001b[0;35m•admin\u001b[0;0m"
                                                        f"\nPokazuje wszystkie możliwe informacje.```", inline=True)
-    f5 = interactions.EmbedField(name="Przykłady:",
+    f5 = interactions.EmbedField(name="Przykłady: ",
                                  value=f"```ansi\n\u001b[0;40m/mapa [Polityczna] [Nie] [Armie]\u001b[0;0m```"
                                        f"\nGeneruje mapę z państwami graczy i armiami."
                                        f"```ansi\n\u001b[0;40m/mapa [Prowincji] [Tak] [ID Prowincji]\u001b[0;0m```"
@@ -447,14 +909,24 @@ def ic_inventory_list():
 
 
 def ic_inventory_item():
-    f1 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/inventory item\u001b[0;0m```"
-                                       f"\nWyświetla informacje o itemach.", inline=False)
+    f1 = interactions.EmbedField(name="[item]", value=f"```ansi"
+                                                      f"\n\u001b[0;31m•Nazwa Itemu\u001b[0;0m"
+                                                      f"\nWyświetla dany item.```", inline=True)
+    f2 = interactions.EmbedField(name="{admin}", value=f"```ansi"
+                                                       f"\n\u001b[0;35m•admin\u001b[0;0m"
+                                                       f"\nPokazuje wszystkie możliwe informacje."
+                                                       f"\n\u001b[0;35m•@ gracza\u001b[0;0m"
+                                                       f"\nWyświetla itemy kraju danego gracza."
+                                                       f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
+                                                       f"\nWyświetla itemy danego kraju.```", inline=True)
+    f3 = interactions.EmbedField(name="Przykłady:",
+                                 value=f"```ansi\n\u001b[0;40m/inventory item [Talary]\u001b[0;0m```"
+                                       f"\nWyświetla informacje o talarach w kraju.", inline=False)
     embed = interactions.Embed(
-        title="/inventory item",
-        description="Wyświetla informacje o itemach które posiada państwo gracza.",
+        title="/inventory item [item] {admin}",
+        description="Wyświetla informacje o itemach.",
         author=author,
-        fields=[f1]
+        fields=[f1, f2, f3]
     )
     return embed
 
@@ -466,7 +938,7 @@ def ic_inventory_give():
                                                       f"\n\u001b[0;31m•Nazwa Kraju\u001b[0;0m"
                                                       f"\nKraj do którego chcemy dać itemy.```", inline=True)
     f2 = interactions.EmbedField(name="[argument]", value=f"```ansi"
-                                                          f"\n\u001b[0;32m•Item | ilość\u001b[0;0m"
+                                                          f"\n\u001b[0;32m•Ilość & Item\u001b[0;0m"
                                                           f"\nRodzaj i ilość itemów które chcemy dać.```", inline=True)
     f3 = interactions.EmbedField(name="{admin}", value=f"```ansi"
                                                        f"\n\u001b[0;35m•admin\u001b[0;0m"
@@ -560,12 +1032,12 @@ def ic_army_recruit():
                                                        f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
                                                        f"\nSpawnuje jednostkę danemu krajowi.```", inline=True)
     f6 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/army recruit [53] [Wojownicy]\u001b[0;0m```"
+                                 value=f"```ansi\n\u001b[0;40m/army recruit [#53] [Wojownicy]\u001b[0;0m```"
                                        f"\nRekrutuje w prowincji #53 jednostkę Wojowników i nadaje im automatycznie"
                                        f"wygenerowaną nazwę jednostki oraz armii."
                                        f"\nOdejmuje potrzebną ilość populacji z prowincji #53."
                                        f"\nOdejmuje potrzebną ilość pozostałych itemów z inventory."
-                                       f"```ansi\n\u001b[0;40m/army recruit [53] [Wojownicy] (Gwardia Królewska) "
+                                       f"```ansi\n\u001b[0;40m/army recruit [#53] [Wojownicy] (Gwardia Królewska) "
                                        f"(Pierwsza Chorągiew)\u001b[0;0m```"
                                        f"\nTo samo co wyżej, ale na dodatek ustawia nazwę jednostki oraz nazwę armii co"
                                        f" ułatwia jej przyszłe zarządzanie i dodaje nam rigczu na polu bitwy.",
@@ -604,7 +1076,7 @@ def ic_army_disband():
                                        f"\nRozwiązuje całą armię."
                                        f"\nZwraca część kosztów rekrutacyjnych oraz żywych żołnierzy do "
                                        f"prowincji ich pochodzenia."
-                                       f"```ansi\n\u001b[0;40m/army disband [Jednostka] [12, 13]\u001b[0;0m```"
+                                       f"```ansi\n\u001b[0;40m/army disband [Jednostka] [#12, #13]\u001b[0;0m```"
                                        f"\nTo samo co wyżej, ale kilka jednostek na raz i po ID.",
                                  inline=False)
     embed = interactions.Embed(
@@ -637,13 +1109,13 @@ def ic_army_reorg():
                                                        f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
                                                        f"\nReorganizuje armię danemu krajowi.```", inline=True)
     f4 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/army reorg [53]\u001b[0;0m```"
+                                 value=f"```ansi\n\u001b[0;40m/army reorg [#53]\u001b[0;0m```"
                                        f"\nWyświela informacje o organizacji armii w prowincji #53."
-                                       "```ansi\n\u001b[0;40m/army reorg [53] ({1: +13, +12})\u001b[0;0m```"
+                                       "```ansi\n\u001b[0;40m/army reorg [#53] ({#1: +#13, +#12})\u001b[0;0m```"
                                        f"\nPrzenosi jednostki o #13 i #12 do armii #1."
-                                       "```ansi\n\u001b[0;40m/army reorg [53] ({+: +13, +12})\u001b[0;0m```"
+                                       "```ansi\n\u001b[0;40m/army reorg [#53] ({+: +#13, +#12})\u001b[0;0m```"
                                        f"\nTworzy nową armię o kolejnym wolnym ID i dodaje do niej jednostki #13 i #12."
-                                       "```ansi\n\u001b[0;40m/army reorg [53] ({1: -13}, {3; +12})\u001b[0;0m```"
+                                       "```ansi\n\u001b[0;40m/army reorg [#53] ({#1: -#13}, {#3; +#12})\u001b[0;0m```"
                                        f"\nUsuwa jednostkę #13 z armii #1 i tworzy dla niej nową armię o kolejnym "
                                        f"wolnym ID. Równocześnie dodaje jednostkę #12 do armii #3.",
                                  inline=False)
@@ -684,7 +1156,7 @@ def ic_army_reinforce():
                                        f"\nGdyby przedtem miała tylko 75% stanu osobowego z powodu bitew lub innych "
                                        f"powodów, teraz wróciła by do 100% sił."
                                        f"\nOdejęte zostanie również 25% bazowego kosztu jednostki z inventory kraju."
-                                       f"```ansi\n\u001b[0;40m/army resupply [Armia] [1, 2]\u001b[0;0m```"
+                                       f"```ansi\n\u001b[0;40m/army resupply [Armia] [#1, #2]\u001b[0;0m```"
                                        f"\nTo samo co wyżej, ale kilka armii na raz.",
                                  inline=False)
     embed = interactions.Embed(
@@ -723,7 +1195,7 @@ def ic_army_rename():
                                  value=f"```ansi\n\u001b[0;40m/army rename [Armia] [Pierwsza Chorągiew] "
                                        f"[Chorągiew Cara] \u001b[0;0m```"
                                        f"\nZmienia nazwę armii 'Pierwsza Chorągiew' na 'Chorągiew Cara'."
-                                       f"```ansi\n\u001b[0;40m/army rename [Jednostka] [13] "
+                                       f"```ansi\n\u001b[0;40m/army rename [Jednostka] [#13] "
                                        f"[Gwardia Cara] \u001b[0;0m```"
                                        f"\nZmienia nazwę jednostki #13 na 'Gwardia Cara'.",
                                  inline=False)
@@ -738,33 +1210,57 @@ def ic_army_rename():
 
 
 def ic_army_move():
-    f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
-                                                      f"\n\u001b[0;31mPusta\u001b[0;0m"
-                                                      f"\nPuste płótno.```", inline=True)
-    f2 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
-                                                       f"\u001b[0;35@ gracza lub nazwa kraju\u001b[0;0m"
-                                                       f"\nPokazuje inventory danego kraju.```", inline=True)
+    f1 = interactions.EmbedField(name="[armia]", value=f"```ansi"
+                                                       f"\n\u001b[0;31m•# armii\u001b[0;0m"
+                                                       f"\nRusza armię o danym ID."
+                                                       f"\n\u001b[0;31m•Nazwa armii\u001b[0;0m"
+                                                       f"\nRusza armię o danej nazwie.```", inline=True)
+    f2 = interactions.EmbedField(name="[granica]", value=f"```ansi"
+                                                         f"\n\u001b[0;32m•# graniczącej prowincji\u001b[0;0m"
+                                                         f"\nRusza do prowincji o danym ID."
+                                                         f"\n\u001b[0;32m•Nazwa graniczącej prowincji\u001b[0;0m"
+                                                         f"\nRusza do prowincji o danej nazwie.```", inline=True)
+    f3 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
+                                                       f"\u001b[0;35m•admin\u001b[0;0m"
+                                                       f"\nTeleportuje armię.```", inline=True)
+    f4 = interactions.EmbedField(name="Przykłady:",
+                                 value=f"```ansi\n\u001b[0;40m/army move [#1] [#50]\u001b[0;0m```"
+                                       f"\nDodaje rozkaz ruchu dla armii o ID #1 z graniczącej prowincji do "
+                                       f"prowincji o ID #50."
+                                       f"```ansi\n\u001b[0;40m/army move [Pierwsza Chorągiew] "
+                                       f"[Kanonia]\u001b[0;0m```"
+                                       f"\nDodaje rozkaz ruchu dla armii o nazwie 'Pierwsza Chorągiew' z graniczącej "
+                                       f"prowincji do prowincji o nazwie 'Kanonia'.", inline=False)
     embed = interactions.Embed(
-        title="/army move Dummy",
-        description="Army List",
+        title="/army move [armia] [granica] {admin}",
+        description="Rusza daną jednostkę na sąsiednią prowincję.",
         author=author,
-        fields=[f1]
+        fields=[f1, f2, f3, f4]
     )
     return embed
 
 
 def ic_army_orders():
-    f1 = interactions.EmbedField(name="[mapa]", value=f"```ansi"
-                                                      f"\n\u001b[0;31mPusta\u001b[0;0m"
-                                                      f"\nPuste płótno.```", inline=True)
+    f1 = interactions.EmbedField(name="[typ]", value=f"```ansi"
+                                                     f"\n\u001b[0;31m•recruit\u001b[0;0m"
+                                                     f"\nWyświetla rozkazy rekrutacji armii."
+                                                     f"\n\u001b[0;31m•reinforce\u001b[0;0m"
+                                                     f"\nWyświetla rozkazy uzupełniania armii."
+                                                     f"\n\u001b[0;31m•move\u001b[0;0m"
+                                                     f"\nWyświetla rozkazy ruchu armii.```", inline=True)
     f2 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
-                                                       f"\u001b[0;35@ gracza lub nazwa kraju\u001b[0;0m"
-                                                       f"\nPokazuje inventory danego kraju.```", inline=True)
+                                                       f"\n\u001b[0;35m•@ gracza\u001b[0;0m"
+                                                       f"\nWyświetla budynki kraju danego gracza."
+                                                       f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
+                                                       f"\nWyświetla budynki danego kraju.```", inline=True)
+    f3 = interactions.EmbedField(name="Przykłady:",
+                                 value=f"```ansi\n\u001b[0;40m/army orders [move]\u001b[0;0m```"
+                                       f"\nWyświetla rozkazy ruchu armii w formie listy.", inline=False)
     embed = interactions.Embed(
-        title="/army orders Dummy",
-        description="Army List",
+        title="/army orders [typ] {admin}",
+        description="Wyświetla informacje o rozkazach.",
         author=author,
-        fields=[f1]
+        fields=[f1, f2, f3]
     )
     return embed
 
@@ -836,7 +1332,7 @@ def ic_building_build():
                                                        f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
                                                        f"\nSpawnuje budynek danemu krajowi.```", inline=True)
     f4 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/building building [53] [Tartak]\u001b[0;0m```"
+                                 value=f"```ansi\n\u001b[0;40m/building building [#53] [Tartak]\u001b[0;0m```"
                                        f"\nBuduje w prowincji #53 Tartak."
                                        f"\nW prowincji #53 zaczyna pracować dana ilość populacji."
                                        f"\nOdejmuje potrzebną ilość pozostałych itemów z inventory.",
@@ -862,10 +1358,10 @@ def ic_building_destroy():
                                                        f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
                                                        f"\nUsuwa budynek danemu krajowi.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/building destroy [27]\u001b[0;0m```"
+                                 value=f"```ansi\n\u001b[0;40m/building destroy [#27]\u001b[0;0m```"
                                        f"\nNiszczy budynek #27."
                                        f"\nZwraca część kosztów oraz zwalnia robotników."
-                                       f"```ansi\n\u001b[0;40m/army disband [27, 37]\u001b[0;0m```"
+                                       f"```ansi\n\u001b[0;40m/army disband [#27, #37]\u001b[0;0m```"
                                        f"\nTo samo co wyżej, ale kilka budynków na raz.",
                                  inline=False)
     embed = interactions.Embed(
@@ -888,10 +1384,10 @@ def ic_building_upgrade():
                                                        f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
                                                        f"\nUlepsza budynek danemu krajowi.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/building destroy [27]\u001b[0;0m```"
+                                 value=f"```ansi\n\u001b[0;40m/building destroy [#27]\u001b[0;0m```"
                                        f"\nNiszczy budynek #27."
                                        f"\nZwraca część kosztów oraz zwalnia robotników."
-                                       f"```ansi\n\u001b[0;40m/army disband [27, 37]\u001b[0;0m```"
+                                       f"```ansi\n\u001b[0;40m/building destroy [#27, #37]\u001b[0;0m```"
                                        f"\nTo samo co wyżej, ale kilka budynków na raz.",
                                  inline=False)
     embed = interactions.Embed(
@@ -931,34 +1427,28 @@ def ic_province_list():
 
 
 def ic_province_rename():
-    f1 = interactions.EmbedField(name="[prowincja]", value=f"```ansi"
-                                                           f"\n\u001b[0;32m•# prowincji\u001b[0;0m"
-                                                           f"\nZmienia nazwę prowincji o danym ID."
-                                                           f"\n\u001b[0;32m•Nazwa prowincji\u001b[0;0m"
-                                                           f"\nZmienia nazwę prowincji o danej nazwie.```",
+    f1 = interactions.EmbedField(name="[nazwa]", value=f"```ansi"
+                                                       f"\n\u001b[0;31m•# prowincji\u001b[0;0m"
+                                                       f"\nZmienia nazwę prowincji o danym ID."
+                                                       f"\n\u001b[0;31m•Nazwa prowincji\u001b[0;0m"
+                                                       f"\nZmienia nazwę prowincji o danej nazwie.```",
                                  inline=True)
     f2 = interactions.EmbedField(name="[nowa_nazwa]", value=f"```ansi"
-                                                            f"\n\u001b[0;33m•Nowa nazwa\u001b[0;0m"
+                                                            f"\n\u001b[0;32m•Nowa nazwa\u001b[0;0m"
                                                             f"\nNadaje nową nazwę prowincji.```",
                                  inline=True)
-    f3 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
-                                                       f"\n\u001b[0;35m•@ gracza\u001b[0;0m"
-                                                       f"\nZmienia nazwę prowincji krajowi danego gracza."
-                                                       f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
-                                                       f"\nZmienia nazwę prowincji danemu krajowi.```",
-                                 inline=True)
-    f4 = interactions.EmbedField(name="Przykłady:",
+    f3 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/province rename [Kanonia] [Skalla] \u001b[0;0m```"
                                        f"\nZmienia nazwę prowincji 'Kanonia' na 'Skalla'."
-                                       f"```ansi\n\u001b[0;40m/province rename [53] [Skalla] \u001b[0;0m```"
+                                       f"```ansi\n\u001b[0;40m/province rename [#53] [Skalla] \u001b[0;0m```"
                                        f"\nZmienia nazwę prowincji #53 na 'Skalla'.",
                                  inline=False)
     embed = interactions.Embed(
-        title="/province rename [nazwa] [nowa_nazwa] {admin}",
+        title="/province rename [nazwa] [nowa_nazwa]",
         description="Zmienia nazwę prowincji którą gracz posiada i kontroluje.\n"
                     "Pozwala na łatwiejsze zarządzanie prowincjami.",
         author=author,
-        fields=[f1, f2, fb, f3, f4]
+        fields=[f1, f2, fb, f3]
     )
     return embed
 

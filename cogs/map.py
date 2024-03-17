@@ -54,7 +54,6 @@ class Map(interactions.Extension):
                                   interactions.Choice(name="Polityczna", value="countries"),
                                   interactions.Choice(name="Religii", value="religions"),
                                   interactions.Choice(name="Populacji", value="pops"),
-                                  interactions.Choice(name="Autonomii", value="autonomy"),
                                   interactions.Choice(name="Pusta", value="empty")]
                          )
     @interactions.option(name='kontury', description='Dodać kontury prowincji?',
@@ -210,30 +209,6 @@ class Map(interactions.Extension):
                         draw.composite(operator="atop", left=0, top=0, width=fi_2.width, height=fi_2.height, image=fi_2)
                         draw(fi)
                     title = "Mapa Populacji"
-                case "autonomy":
-                    final_image = Image(filename="gfx/maps/plain.png")
-                    image = Image(filename="gfx/maps/provinces.png")
-                    fi = final_image.clone()
-                    fi_2 = image.clone()
-                    result = db.pax_engine.connect().execute(text(
-                        "SELECT pixel_capital_x, pixel_capital_y, province_autonomy, country_id FROM provinces"))
-                    final_table = result.fetchall()
-                    with Drawing() as draw:
-                        for row in final_table:
-                            match row[3]:
-                                case 253 | 254 | 255:
-                                    draw.fill_color = Color(f'#00000000')
-                                    draw.color(row[0], row[1], 'replace')
-                                case _:
-                                    r = hex(int(255 - (row[2] * 2.5)))
-                                    g = hex(int(0 + (row[2] * 2.5)))
-                                    draw.fill_color = Color(f'#{str(r)[2:]}{str(g)[2:]}00')
-                                    draw.color(row[0], row[1], 'replace')
-                        draw(fi_2)
-                    with Drawing() as draw:
-                        draw.composite(operator="atop", left=0, top=0, width=fi_2.width, height=fi_2.height, image=fi_2)
-                        draw(fi)
-                    title = "Mapa Autonomii"
                 case "empty":
                     final_image = Image(width=1628, height=1628, background=Color('transparent'))
                     fi = final_image.clone()

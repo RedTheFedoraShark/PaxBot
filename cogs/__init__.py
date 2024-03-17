@@ -11,5 +11,6 @@ __all__ = [
     'inventory',
     'commands',
     'admin',
-    'province'
+    'province',
+    'building'
 ]

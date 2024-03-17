@@ -210,19 +210,52 @@ async def build_army_order_move(country_id):
 async def build_province_list(country_id: int):
     connection = db.pax_engine.connect()
     table = connection.execute(text(
-        f"SELECT province_name, province_id, region_name, terrain_name, good_name, religion_name, province_pops, "
-        f"c.country_id, cc.country_id "
-        f"FROM provinces p NATURAL JOIN regions NATURAL JOIN goods NATURAL JOIN terrains "
-        f"NATURAL JOIN religions "
-        f"INNER JOIN countries c ON p.country_id = c.country_id "
-        f"INNER JOIN countries cc ON p.controller_id = cc.country_id "
-        f"WHERE p.country_id = {country_id} OR p.controller_id = {country_id}")).fetchall()
+        f"""
+        SELECT 
+  CONCAT(
+    p.province_name, ' \u001b[0;30m(', 
+    p.province_id, ')\u001b[0;0m'
+  ), 
+  r.region_name, 
+  t.terrain_name, 
+  g.good_name, 
+  re.religion_name, 
+  CONCAT(
+    p.province_pops, 
+    '(', 
+    IFNULL(
+      SUM(s.quantity * b.building_workers), 
+      0
+    ), 
+    ')/', 
+    pl.province_pops_limit
+  ), 
+  c.country_id, 
+  cc.country_id 
+FROM 
+  provinces p NATURAL 
+  JOIN regions r NATURAL 
+  JOIN goods g NATURAL 
+  JOIN terrains t NATURAL 
+  JOIN religions re 
+  INNER JOIN countries c ON p.country_id = c.country_id 
+  INNER JOIN countries cc ON p.controller_id = cc.country_id 
+  LEFT JOIN structures s ON p.province_id = s.province_id 
+  LEFT JOIN buildings b ON s.building_id = b.building_id 
+  LEFT JOIN province_levels pl ON p.province_level = pl.province_level 
+WHERE 
+  p.country_id = {country_id} 
+  OR p.controller_id = {country_id} 
+GROUP BY 
+  p.province_id 
+ORDER BY 
+  p.province_id;
+        """
+    )).fetchall()
 
     df = pd.DataFrame(table, columns=[
-        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Status', 'Status2'])
-    df = df.sort_values(by=['ID'])
+        'Prowincja (ID)', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Status', 'Status2'])
     for i, row in df.iterrows():
-        df.at[i, 'ID'] = f"\u001b[0;30m ({df['ID'][i]})\u001b[0;0m"
         if df.at[i, 'Status'] == df.at[i, 'Status2']:
             print(type(df.at[i, 'Status']))
             print(type(country_id))
@@ -231,28 +264,57 @@ async def build_province_list(country_id: int):
             df.at[i, 'Status'] = f"\u001b[0;33mOkupacja\u001b[0;0m"
         elif df.at[i, 'Status'] == country_id:
             df.at[i, 'Status'] = f"\u001b[0;31mOkupacja\u001b[0;0m"
-    combined = df['Prowincja'] + df['ID']
-    df.drop(['Prowincja', 'ID', 'Status2'], axis=1, inplace=True)
-    df.insert(0, 'Prowincja (ID)', combined)
+    df.drop(['Status2'], axis=1, inplace=True)
     return df
 
 
 async def build_province_list_admin():
     connection = db.pax_engine.connect()
     table = connection.execute(text(
-        f"SELECT province_name, province_id, region_name, terrain_name, good_name, religion_name, province_pops, "
-        f"c.country_id, cc.country_id "
-        f"FROM provinces p NATURAL JOIN regions NATURAL JOIN goods NATURAL JOIN terrains "
-        f"NATURAL JOIN religions "
-        f"INNER JOIN countries c ON p.country_id = c.country_id "
-        f"INNER JOIN countries cc ON p.controller_id = cc.country_id "
-        f"WHERE province_id BETWEEN 1 AND 251")).fetchall()
+        f"""
+        SELECT 
+  CONCAT(
+    p.province_name, ' \u001b[0;30m(', 
+    p.province_id, ')\u001b[0;0m'
+  ), 
+  r.region_name, 
+  t.terrain_name, 
+  g.good_name, 
+  re.religion_name, 
+  CONCAT(
+    p.province_pops, 
+    '(', 
+    IFNULL(
+      SUM(s.quantity * b.building_workers), 
+      0
+    ), 
+    ')/', 
+    pl.province_pops_limit
+  ), 
+  c.country_id, 
+  cc.country_id 
+FROM 
+  provinces p NATURAL 
+  JOIN regions r NATURAL 
+  JOIN goods g NATURAL 
+  JOIN terrains t NATURAL 
+  JOIN religions re 
+  INNER JOIN countries c ON p.country_id = c.country_id 
+  INNER JOIN countries cc ON p.controller_id = cc.country_id 
+  LEFT JOIN structures s ON p.province_id = s.province_id 
+  LEFT JOIN buildings b ON s.building_id = b.building_id 
+  LEFT JOIN province_levels pl ON p.province_level = pl.province_level 
+WHERE 
+  p.province_id BETWEEN 1 AND 251 
+GROUP BY 
+  p.province_id 
+ORDER BY 
+  p.province_id;
+        """)).fetchall()
 
     df = pd.DataFrame(table, columns=[
-        'Prowincja', 'ID', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Status', 'Status2'])
-    df = df.sort_values(by=['ID'])
+        'Prowincja (ID)', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Status', 'Status2'])
     for i, row in df.iterrows():
-        df.at[i, 'ID'] = f"\u001b[0;30m ({df['ID'][i]})\u001b[0;0m"
         print(df.at[i, 'Status'])
         if df.at[i, 'Status'] == 255:
             df.at[i, 'Status'] = f"\u001b[0;34mPuste\u001b[0;0m"
@@ -260,9 +322,7 @@ async def build_province_list_admin():
             df.at[i, 'Status'] = f"\u001b[0;32mKontrola\u001b[0;0m"
         else:
             df.at[i, 'Status'] = f"\u001b[0;31mOkupacja\u001b[0;0m"
-    combined = df['Prowincja'] + df['ID']
-    df.drop(['Prowincja', 'ID', 'Status2'], axis=1, inplace=True)
-    df.insert(0, 'Prowincja (ID)', combined)
+    df.drop(['Status2'], axis=1, inplace=True)
     return df
 
 
@@ -781,8 +841,6 @@ def ic_map():
                                                       f"\nReligie wasze i nasze."
                                                       f"\n\u001b[0;31m•Populacji\u001b[0;0m"
                                                       f"\nPopulacje prowincji."
-                                                      f"\n\u001b[0;31m•Autonomii\u001b[0;0m"
-                                                      f"\nAutnomie prowincji."
                                                       f"\n\u001b[0;31m•Pusta\u001b[0;0m"
                                                       f"\nPuste płótno.```", inline=True)
     f2 = interactions.EmbedField(name="[kontury]", value=f"```ansi"
@@ -806,7 +864,7 @@ def ic_map():
     f4 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
                                                        f"\u001b[0;35m•admin\u001b[0;0m"
                                                        f"\nPokazuje wszystkie możliwe informacje.```", inline=True)
-    f5 = interactions.EmbedField(name="Przykłady:",
+    f5 = interactions.EmbedField(name="Przykłady: ",
                                  value=f"```ansi\n\u001b[0;40m/mapa [Polityczna] [Nie] [Armie]\u001b[0;0m```"
                                        f"\nGeneruje mapę z państwami graczy i armiami."
                                        f"```ansi\n\u001b[0;40m/mapa [Prowincji] [Tak] [ID Prowincji]\u001b[0;0m```"

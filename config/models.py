@@ -1456,26 +1456,44 @@ def ic_province_rename():
 """
 Guess I will just sneak in with my own code here too - red
 """
-def bt_list():
+def bt_list(buildings):
+    list = ""
+    for i, building in enumerate(buildings):
+        list += f'{i+1} {building[3]} {building[1]}\n'
     f1 = interactions.EmbedField(
-        name="Budynki",
-        value=f"```asni"
-              f""
-              f""
-              f""
-              f""
-              f""
-              f""
-              f""
-              f""
-              f""
-              f""
-              f""
-              f""
-              f""
-              f""
-              f""
-              f""
+        name='Budynki',
+        value=list
     )
-    embed = None
+    embed = interactions.Embed(
+        title="Budynki",
+        description="Lista wszystkich budynków dostępnych dla twojego państwa.",
+        author=author,
+        inline=True,
+        fields=[f1]
+    )
+    return embed
+
+
+def bt_detail(building, connection):
+    f1 = interactions.EmbedField(
+        name='test',
+        value=building[2]
+    )
+    income = connection.execute(text(f'SELECT item_name, item_quantity FROM buildings_production NATURAL JOIN items '
+                                     f'WHERE building_id = {building[0]};')).fetchall()
+    print(income)
+    income = pandas.DataFrame(income, columns=['Przedmiot', 'Przychód'])
+
+    print(income.to_markdown(index=False))
+    f2 = interactions.EmbedField(
+        name='Przychód',
+        value=f'```ansi\n{income.to_markdown(index=False)}```'
+    )
+    embed = interactions.Embed(
+        title=f'{building[1]}',
+        desc=building[2],
+        thumbnail=interactions.EmbedImageStruct(url=building[4]),
+        inline=False,
+        fields=[f1, f2]
+    )
     return embed

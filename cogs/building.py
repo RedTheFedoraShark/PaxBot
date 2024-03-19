@@ -23,7 +23,7 @@ class Template(interactions.Extension):
     @interactions.option(description='#Id lub nazwa prowincji')
     @interactions.option(description='Nazwa państwa lub ping')
     @interactions.option(description='Admin?')
-    async def list(self, ctx: interactions.CommandContext, province: str = '', country: str = '', admin: bool = False):
+    async def list(self, ctx: interactions.CommandContext, province: str = '.', country: str = '', admin: bool = False):
         if admin and ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
             is_admin = True
         else:
@@ -62,6 +62,15 @@ class Template(interactions.Extension):
                 return
             country = country[0]
 
+        ### origin country check
+        origin_country = connection.execute(
+            text(
+                f'SELECT country_id from players NATURAL JOIN countries WHERE player_id = {ctx.author.id};')).fetchone()
+        if origin_country is None and not is_admin:
+            await ctx.send('Nie masz przypisanego państwa!')
+            return
+        origin_country = origin_country[0]
+
         ###
         ### Check province variable
         ###
@@ -74,10 +83,11 @@ class Template(interactions.Extension):
             province = result[0]
         elif province != '':
             province = connection.execute(
-                text(f'SELECT province_id FROM provinces WHERE province_name = "{province}";')).fetchone()[0]
+                text(f'SELECT province_id FROM provinces WHERE province_name = "{province}";')).fetchone()
             if province is None:
                 await ctx.send('Pojebało cię dziewczynko')
                 return
+            province = province[0]
 
         ###
         ### Get specific info based on variables
@@ -91,6 +101,7 @@ class Template(interactions.Extension):
                          f'FROM provinces NATURAL JOIN structures '
                          f'WHERE province_id = {province} '
                          f'ORDER BY building_name ASC;')).fetchall()
+                embed = models.bl_province(result)
 
             elif country != '':
                 result = connection.execute(
@@ -98,20 +109,51 @@ class Template(interactions.Extension):
                          f'FROM provinces NATURAL JOIN structures '
                          f'WHERE country_id = {country}'
                          f'ORDER BY province_id, building name ASC;')).fetchall()
+                embed = models.bl_country(result)
         else:
-            if province != '':
-                visible = connection.execute(
-                    text(f'SELECT province_id FROM armies WHERE country_id = {country}'
-                         f'UNION'
-                         f'SELECT province_id FROM provinces WHERE controller_id = {country};')).fetchall()
-                print(visible)
-                # visibility check
-                # neighbour_visible = connection.execute(
-                #     text(f'SELECT province_id FROM borders WHERE province_id = {province}'
-                #          f'UNION'
-                #          f'SELECT province_id_2 FROM borders WHERE province_id_2 = {province}'))
+            # visibility check
+            visible = connection.execute(
+                text(f'SELECT province_id FROM armies WHERE country_id = {origin_country} '
+                     f'UNION '
+                     f'SELECT province_id FROM provinces WHERE controller_id = {origin_country};')).fetchall()
+            list = '('
+            for prov in visible:
+                list += f'{prov[0]},'
+            list = list[:-1] + ')'
 
-            pass
+            all_visible = connection.execute(
+                text(f'SELECT province_id FROM borders WHERE province_id in {list} '
+                     f'UNION '
+                     f'SELECT province_id_2 FROM borders WHERE province_id_2 in {list};')).fetchall()
+            list = '('
+            for prov in visible:
+                list += f'{prov[0]},'
+            list = list[:-1] + ')'
+
+            if province != '':
+                visible = False
+                for p in all_visible:
+                    if province in p:
+                        visible = True
+                if visible:
+                    result = connection.execute(
+                        text(f'SELECT province_id, province_name, structures.building_id, building_name '
+                             f'FROM provinces NATURAL JOIN structures INNER JOIN buildings on structures.building_id = buildings.building_id '
+                             f'WHERE provinces.province_id = {province}'
+                             f';')).fetchall()
+                    embed = models.bl_province(result)
+                else:
+                    await ctx.send('Ta prowincja jest spowita mgłą wojny!')
+                    return
+
+            elif country != '':
+                result = connection.execute(
+                    text(f'SELECT province_id, province_name, structures.building_id, building_name '
+                         f'FROM provinces NATURAL JOIN structures NATURAL JOIN buildings '
+                         f'WHERE country_id = {country} and province_id in {list} '
+                         f'ORDER BY province_id, building name ASC;')).fetchall()
+                embed = models.bl_country(result)
+        await ctx.send(embeds=embed)
         return
 
     @building.subcommand(description='Lista twoich szablonów budynków')

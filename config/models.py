@@ -1008,6 +1008,22 @@ def bt_detail(building, connection):
     )
     return embed
 
-def bl_province():
-    embed = None
+def bl_country(buildings):
+    embed = interactions.Embed(
+        title=f'{building[1]}',
+        desc=building[2],
+        thumbnail=interactions.EmbedImageStruct(url=building[4]),
+        inline=False,
+        fields=[f1, f2]
+    )
+    return embed
+
+def bl_province(buildings):
+    embed = interactions.Embed(
+        title=f'{building[1]}',
+        desc=building[2],
+        thumbnail=interactions.EmbedImageStruct(url=building[4]),
+        inline=False,
+        fields=[f1, f2]
+    )
     return embed

@@ -94,7 +94,7 @@ class Info(interactions.Extension):
             country_id = connection.execute(text(
                 f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {country[2:-1]}')).fetchone()
             if country_id is None:
-                await ctx.send(f'Państwo - {country} - nie istnieje.')
+                await ctx.send(f"```ansi\nGracz '{country}' \u001b[0;31mnie ma państwa\u001b[0;0m.")
                 connection.close()
                 return
         else:  # If string is (hopefully) a country name.
@@ -106,7 +106,7 @@ class Info(interactions.Extension):
                     text(f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{country}"'
                          )).fetchone()
             if country_id is None:
-                await ctx.send(f'Państwo - {country} - nie istnieje.')
+                await ctx.send(f"```ansi\nPaństwo '{country}' \u001b[0;31mnie istnieje\u001b[0;0m.")
                 connection.close()
                 return
 

@@ -3,9 +3,53 @@ from prototype import defdump
 from config.colorful import Colorful, timestamp
 from database import *
 from sqlalchemy import text
+import numpy as np
+
 
 # from os import path
 # import json
+
+
+def inventories_debug():
+    connection = db.pax_engine.connect()
+    countries = connection.execute(text(f"SELECT country_id FROM countries")).fetchall()
+    items = connection.execute(text(f"SELECT item_id FROM items")).fetchall()
+    countries = np.rot90(np.array(countries)).tolist()
+    items = np.rot90(np.array(items)).tolist()
+    countries = countries[0][:-3]
+    items = items[0]
+    values = []
+    for c in countries:
+        for i in items:
+            values.append((i, c))
+    values = str(values)[1:-1]
+    print(items)
+    print(countries)
+    print(values)
+    connection.execute(
+        text(f"INSERT IGNORE INTO inventories (item_id, country_id) VALUES {values}")).connection.commit()
+    return
+
+
+def terrains_modifiers_debug():
+    connection = db.pax_engine.connect()
+    terrains = connection.execute(text(f"SELECT terrain_id FROM terrains")).fetchall()
+    items = connection.execute(text(f"SELECT item_id FROM items")).fetchall()
+    terrains = np.rot90(np.array(terrains)).tolist()
+    items = np.rot90(np.array(items)).tolist()
+    terrains = terrains[0]
+    items = items[0]
+    values = []
+    for t in terrains:
+        for i in items:
+            values.append((i, t))
+    values = str(values)[1:-1]
+    print(items)
+    print(terrains)
+    print(values)
+    connection.execute(
+        text(f"INSERT IGNORE INTO terrains_modifiers (item_id, terrain_id) VALUES {values}")).connection.commit()
+    return
 
 
 class DBDebug(interactions.Extension):
@@ -13,8 +57,19 @@ class DBDebug(interactions.Extension):
         self.bot = bot
 
     @interactions.extension_command(
+        name="debug",
+        description="engine check",
+        scope='917078941213261914'
+    )
+    async def debug(self, ctx):
+        inventories_debug()
+        terrains_modifiers_debug()
+        await ctx.send("test")
+
+    @interactions.extension_command(
         name="database",
-        description="engine check"
+        description="engine check",
+        scope='917078941213261914'
     )
     async def database(self, ctx):
         embed = interactions.Embed(

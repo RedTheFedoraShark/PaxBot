@@ -15,7 +15,7 @@ class Inventory(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @interactions.extension_command(description='Zarządzanie ekwipunkiem')
+    @interactions.extension_command(description='Zarządzanie ekwipunkiem', scope='917078941213261914')
     async def inventory(self, ctx: interactions.CommandContext):
         return
 
@@ -80,7 +80,6 @@ class Inventory(interactions.Extension):
         connection.close()
         return
 
-
     @inventory.subcommand(name='item', description="Informacje o itemach które posiadasz.")
     @interactions.option(name='item', description='O jakim itemie wyświetlić informacje?', autocomplete=True)
     @interactions.option(name='admin', description='Jesteś admin?.')
@@ -94,7 +93,7 @@ class Inventory(interactions.Extension):
         else:
             admin = False
             query = db.pax_engine.connect().execute(text(
-                f'SELECT item_id, item_name FROM  countries NATURAL JOIN inventories NATURAL JOIN items '
+                f'SELECT item_id, item_name FROM countries NATURAL JOIN inventories NATURAL JOIN items '
                 f'WHERE country_id = {country_id[0]} AND NOT quantity <= 0')).fetchall()
 
         index = 0
@@ -158,7 +157,6 @@ class Inventory(interactions.Extension):
                 for item_name in items if str.lower(item) in str.lower(item_name[0])
             ]
         await ctx.populate(choices)
-
 
     @inventory.subcommand(description='Przekaż coś innemu graczu.')
     @interactions.option(name='country', description='a')

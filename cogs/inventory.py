@@ -2,7 +2,7 @@ import interactions
 from database import *
 from sqlalchemy import text
 from config import models
-from interactions.ext.paginator import Page, Paginator
+from interactions.ext.paginators import Page, Paginator
 
 
 # all class names from this file have to be included in def below
@@ -15,45 +15,54 @@ class Inventory(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @interactions.extension_command(description='Zarządzanie ekwipunkiem', scope='917078941213261914')
-    async def inventory(self, ctx: interactions.CommandContext):
+    @interactions.slash_command(description='Zarządzanie ekwipunkiem', scopes=['917078941213261914'])
+    async def inventory(self, ctx: interactions.SlashContext):
         return
 
-    @inventory.subcommand(description='Zobacz ekwipunek')
-    @interactions.option(name='country', description='Podaj nazwę państwa lub oznacz gracza. Zostaw puste dla swojego.')
-    @interactions.option(name='sort', description='Sortuj ekwipunek',
-                         choices=[
-                             interactions.Choice(name='wg nazwy', value='name'),
-                             interactions.Choice(name='wg ilości', value='count')
-                         ])
-    @interactions.option(name='order', description='Rosnąco/Malejąco',
-                         choices=[
-                             interactions.Choice(name='rosnąco', value='ASC'),
-                             interactions.Choice(name='malejąco', value='DESC')
-                         ])
-    async def list(self, ctx: interactions.CommandContext, country: str='', sort: str='name', order: str='ASC'):
+    @inventory.subcommand(sub_cmd_name="list")
+    @interactions.slash_option(name='country', opt_type=interactions.OptionType.STRING,
+                               description='Podaj nazwę państwa lub oznacz gracza. Zostaw puste dla swojego.')
+    @interactions.slash_option(name='sort',
+                               opt_type=interactions.OptionType.STRING,
+                               description='Sortuj ekwipunek',
+                               choices=[
+                                   interactions.SlashCommandChoice(name='wg nazwy', value='name'),
+                                   interactions.SlashCommandChoice(name='wg ilości', value='count')
+                               ])
+    @interactions.slash_option(name='order',
+                               opt_type=interactions.OptionType.STRING,
+                               description='Rosnąco/Malejąco',
+                               choices=[
+                                   interactions.SlashCommandChoice(name='rosnąco', value='ASC'),
+                                   interactions.SlashCommandChoice(name='malejąco', value='DESC')
+                               ])
+    async def list(self, ctx: interactions.SlashContext, country: str = '', sort: str = 'name', order: str = 'ASC'):
 
         await ctx.defer()
         connection = db.pax_engine.connect()
 
-        if country.startswith('<@') and country.endswith('>'): # if a ping
+        if country.startswith('<@') and country.endswith('>'):  # if a ping
             # id = panstwo[2:-1]
             result = connection.execute(
-                text(f'SELECT country_name FROM players NATURAL JOIN countries WHERE player_id = {country[2:-1]}')).fetchone()
+                text(
+                    f'SELECT country_name FROM players NATURAL JOIN countries WHERE player_id = {country[2:-1]}')).fetchone()
             if result is None:
                 await ctx.send('Ten gracz nie ma przypisanego państwa.')
                 connection.close()
                 return
             country = result[0]
         elif country != '':
-            result = connection.execute(text(f'SELECT country_name FROM countries WHERE country_name = "{country}"')).fetchone()
+            result = connection.execute(
+                text(f'SELECT country_name FROM countries WHERE country_name = "{country}"')).fetchone()
             if result is None:
                 await ctx.send('Takie państwo nie istnieje.')
                 connection.close()
                 return
         else:
             country = connection.execute(
-                text(f'SELECT country_name from players NATURAL JOIN countries WHERE player_id = {ctx.author.id};')).fetchone()[0]
+                text(
+                    f'SELECT country_name from players NATURAL JOIN countries WHERE player_id = {ctx.author.id};')).fetchone()[
+                0]
 
         result = connection.execute(
             text(f'SELECT DISTINCT item_name, quantity, item_emoji '
@@ -80,14 +89,17 @@ class Inventory(interactions.Extension):
         connection.close()
         return
 
-    @inventory.subcommand(name='item', description="Informacje o itemach które posiadasz.")
-    @interactions.option(name='item', description='O jakim itemie wyświetlić informacje?', autocomplete=True)
-    @interactions.option(name='admin', description='Jesteś admin?.')
-    async def item(self, ctx: interactions.CommandContext, item: str, admin: str = ''):
+    @inventory.subcommand(sub_cmd_name="item")
+    @interactions.slash_option(name='item', description='O jakim itemie wyświetlić informacje?',
+                               opt_type=interactions.OptionType.STRING, required=True,
+                               autocomplete=True)
+    @interactions.slash_option(name='admin', description='Jesteś admin?.',
+                               opt_type=interactions.OptionType.STRING)
+    async def item(self, ctx: interactions.SlashContext, item: str, admin: str = ''):
         country_id = db.pax_engine.connect().execute(text(
             f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {ctx.author.id}')).fetchone()
 
-        if admin == "admin" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+        if admin == "admin" and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
             admin = True
             query = db.pax_engine.connect().execute(text(f'SELECT item_id, item_name FROM items')).fetchall()
         else:
@@ -108,17 +120,11 @@ class Inventory(interactions.Extension):
             pages = []
             for item_id in single_list:
                 embed = await models.build_item_embed_admin(item_id)
-                pages.append(Page(embeds=embed))
-            await Paginator(
-                client=self.bot,
-                ctx=ctx,
-                author_only=True,
-                timeout=300,
-                message="test",
-                use_index=True,
-                index=index,
-                pages=pages
-            ).run()
+                pages.append(embed)
+
+            paginator = Paginator.create_from_embeds(ctx.client, *pages)
+            paginator.page_index = index
+            await paginator.send(ctx=ctx)
         else:
             match len(single_list):
                 case 0:
@@ -130,44 +136,43 @@ class Inventory(interactions.Extension):
                     pages = []
                     for item_id in single_list:
                         embed = await models.build_item_embed(ctx, self, item_id, country_id[0])
-                        pages.append(Page(embeds=embed))
-                    await Paginator(
-                        client=self.bot,
-                        ctx=ctx,
-                        author_only=True,
-                        timeout=300,
-                        message="test",
-                        index=index,
-                        pages=pages
-                    ).run()
+                        pages.append(embed)
+                    paginator = Paginator.create_from_embeds(ctx.client, *pages)
+                    paginator.page_index = index
+                    await paginator.send(ctx=ctx)
 
-    @interactions.extension_autocomplete(command='inventory', name='item')
-    async def item_autocomplete(self, ctx: interactions.CommandContext, item: str = ""):
+    @item.autocomplete("item")
+    async def item_autocomplete(self, ctx: interactions.AutocompleteContext):
         items = db.pax_engine.connect().execute(text(
-                f'SELECT item_name FROM players NATURAL JOIN countries NATURAL JOIN inventories NATURAL JOIN items '
-                f'WHERE player_id = "{ctx.author.id}" AND quantity > 0')).fetchall()
+            f'SELECT item_name FROM players NATURAL JOIN countries NATURAL JOIN inventories NATURAL JOIN items '
+            f'WHERE player_id = "{ctx.author.id}" AND quantity > 0')).fetchall()
+        item = ctx.input_text
         if item == "":
             choices = [
-                interactions.Choice(name=item_name[0], value=item_name[0])
+                interactions.SlashCommandChoice(name=item_name[0], value=item_name[0])
                 for item_name in items
             ]
         else:
             choices = [
-                interactions.Choice(name=item_name[0], value=item_name[0])
+                interactions.SlashCommandChoice(name=item_name[0], value=item_name[0])
                 for item_name in items if str.lower(item) in str.lower(item_name[0])
             ]
-        await ctx.populate(choices)
+        await ctx.send(choices)
 
-    @inventory.subcommand(description='Przekaż coś innemu graczu.')
-    @interactions.option(name='country', description='a')
-    @interactions.option(name='items', description='b')
-    async def give(self, ctx: interactions.CommandContext, country: str, items: str, admin: bool = False):
+    @inventory.subcommand(sub_cmd_name="give")
+    @interactions.slash_option(name='country', description='a',
+                               opt_type=interactions.OptionType.STRING)
+    @interactions.slash_option(name='items', description='b',
+                               opt_type=interactions.OptionType.STRING)
+    @interactions.slash_option(name='admin', description='c',
+                               opt_type=interactions.OptionType.BOOLEAN)
+    async def give(self, ctx: interactions.SlashContext, country: str, items: str, admin: bool = False):
         await ctx.defer()
 
         connection = db.pax_engine.connect()
 
         if admin:
-            if not await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+            if not ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
                 await ctx.send("You have no power here!")
                 return
         else:
@@ -197,6 +202,7 @@ class Inventory(interactions.Extension):
             country = result[0]
 
         items = items.lower().split(',')
+        print(items)
         # items = items.split(',')
         for i in range(len(items)):
             items[i] = items[i].strip()
@@ -220,7 +226,13 @@ class Inventory(interactions.Extension):
             for item in items:
                 player_has_item = False
                 for jtem in player_inventory:
-                    if item[2] == jtem[1] and int(item[1]) <= jtem[0]:
+                    print(item[2])
+                    print(jtem[1])
+                    print(item[1])
+                    print(jtem[0])
+                    print(item)
+                    print(jtem)
+                    if item[2] == jtem[1] and int(item[0]) <= jtem[0]:
                         player_has_item = True
                         break
                 if not player_has_item:
@@ -277,17 +289,14 @@ class Inventory(interactions.Extension):
 
         connection.close()
 
-
-
-
     ###############
     # admin debug #
     ###############
 
     # @inventory.subcommand(description='!ADMIN ONLY!')
-    # @interactions.option(name='country', description='a')
-    # @interactions.option(name='items', description='b')
-    # async def add(self, ctx: interactions.CommandContext, country: str, items: str):
+    # @interactions.slash_option(name='country', description='a')
+    # @interactions.slash_option(name='items', description='b')
+    # async def add(self, ctx: interactions.SlashContext, country: str, items: str):
     #     if not await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
     #         await ctx.send("You have no power here!")
     #         return

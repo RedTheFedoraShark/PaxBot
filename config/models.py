@@ -1,10 +1,13 @@
 import random
-import pandas as pd
 import interactions
+import json
 import re
+import pandas as pd
 from database import *
 from sqlalchemy import text
-from interactions.ext.paginator import Page
+
+with open("./config/config.json") as f:
+    configure = json.load(f)
 
 
 # Pagify a table string
@@ -18,7 +21,7 @@ async def pagify(dataframe: list):
         bit = f"{bit}\n{line}"
     pages = []
     for i, bit in enumerate(bits):
-        pages.append(Page(title=str(i+1) + ". Strona", content=f"```ansi\n{bit}```"))
+        pages.append(interactions.Embed(title=str(i+1) + ". Strona", description=f"```ansi\n{bit}```"))
     return pages
 
 
@@ -454,7 +457,7 @@ async def build_province_embed(province_id: int, country_id: int):
 
                                                 fields=[f7] + army_embed))
 
-    image = interactions.EmbedImageStruct(url=terrain_image_url)
+    image = interactions.EmbedAttachment(url=terrain_image_url)
     # Building the Embed
     embed = interactions.Embed(
         #color=int(query[7], 16),
@@ -463,8 +466,7 @@ async def build_province_embed(province_id: int, country_id: int):
         #footer=embed_footer,
         #thumbnail=embed_thumbnail,
         #author=embed_author,
-        fields=first_fields,
-        image=image
+        fields=first_fields
     )
     embeds.insert(0, embed)
     connection.close()
@@ -475,28 +477,64 @@ async def build_province_embed(province_id: int, country_id: int):
 async def build_country_embed(self, country_id: int):
     connection = db.pax_engine.connect()
     query = connection.execute(text(
-        f'SELECT * FROM players NATURAL JOIN countries NATURAL JOIN religions WHERE country_id = "{country_id}"'
+        f"""
+        SELECT 
+          r.religion_id, 
+          c.country_id, 
+          p.player_id, 
+          p.player_name, 
+          p.player_rank, 
+          c.country_name, 
+          c.country_desc, 
+          c.country_color, 
+          c.country_ruler, 
+          c.country_government, 
+          c.country_capital, 
+          c.country_bio_url, 
+          c.country_image_url, 
+          c.country_credo, 
+          c.country_credo_image, 
+          c.channel_id, 
+          r.religion_name, 
+          r.religion_head, 
+          r.religion_capital, 
+          r.religion_color, 
+          r.religion_bio_url, 
+          r.religion_image_url, 
+          r.religion_credo, 
+          r.religion_credo_image 
+        FROM 
+          players p NATURAL 
+          JOIN countries c NATURAL 
+          JOIN religions r 
+        WHERE 
+          country_id = "{country_id}"
+        """
     )).fetchall()
     # Repairing names for multiple players on one country
-    names = ''
+    owners = ''
     for x in query:
-        name = await interactions.get(self.bot, interactions.User, object_id=x[2])
-        names = f"{name.username}#{name.discriminator} {names}"
+        member = await self.bot.fetch_member(user_id=x[2], guild_id=configure['GUILD'])
+        user = member.user
+        owners = f"{user.tag} {owners}"
     query = list(query[0])
-    query[3] = names
+    query[3] = owners
     query2 = connection.execute(text(
         f'SELECT SUM(province_pops), COUNT(*) FROM provinces WHERE country_id = "{country_id}"')).fetchone()
     query3 = connection.execute(text(
         f'SELECT province_name FROM provinces WHERE province_id = "{query[10]}"')).fetchone()
     query4 = connection.execute(text(
         f'SELECT COUNT(*) FROM countries WHERE NOT country_id BETWEEN 253 AND 255')).fetchone()
-    user = await interactions.get(self.bot, interactions.User, object_id=query[2])
+    member = await self.bot.fetch_member(user_id=query[2], guild_id=configure['GUILD'])
+    user = member.user
     # Creating embed elements
     embed_footer = interactions.EmbedFooter(
         text=query[13],
         icon_url=query[14]
     )
-    embed_thumbnail = interactions.EmbedImageStruct(
+    if (query[13] is None) or (query[14] is None):
+        embed_footer = None
+    embed_thumbnail = interactions.EmbedAttachment(
         url=query[12]
     )
     embed_author = interactions.EmbedAuthor(
@@ -518,8 +556,8 @@ async def build_country_embed(self, country_id: int):
         color=int(query[7], 16),
         title=query[5],
         # description=result_countries[5],
-        url=query[11],
         footer=embed_footer,
+        url=query[11],
         thumbnail=embed_thumbnail,
         author=embed_author,
         fields=[f1, f2, fb, f3, f4, fb, f5, f6, fb, f7, f8]
@@ -531,17 +569,17 @@ async def build_country_embed(self, country_id: int):
 # /inventory items
 async def build_item_embed_good(ctx, self, item_id: int, country_id: int, item_query: list):
     province_query = db.pax_engine.connect().execute(text(
-        f'SELECT item_id, item_name, item_color, item_image_url, item_desc, quantity, item_good '
+        f'SELECT item_id, item_name, item_color, item_image_url, item_desc, quantity, item_type '
         f'FROM items NATURAL JOIN inventories '
         f'WHERE item_id = "{item_id}" AND country_id = "{country_id}"'
     )).fetchone()
     # Creating embed elements
-    user = await interactions.get(self.bot, interactions.User, object_id=ctx.author.id)
-    embed_thumbnail = interactions.EmbedImageStruct(
+    user = ctx.author
+    embed_thumbnail = interactions.EmbedAttachment(
         url=item_query[3]
     )
     embed_author = interactions.EmbedAuthor(
-        name=user.username + "#" + user.discriminator,
+        name=user.tag,
         icon_url=user.avatar_url
     )
     f1 = interactions.EmbedField(name="Opis", value=f"```{item_query[4]}```", inline=False)
@@ -572,8 +610,8 @@ async def build_item_embed_good(ctx, self, item_id: int, country_id: int, item_q
 
 
 async def build_item_embed_talar(ctx, self):
-    user = await interactions.get(self.bot, interactions.User, object_id=ctx.author.id)
-    embed_thumbnail = interactions.EmbedImageStruct(
+    user = ctx.author
+    embed_thumbnail = interactions.EmbedAttachment(
         url="https://i.imgur.com/4MFkrcH.png"
     )
     embed_author = interactions.EmbedAuthor(
@@ -600,12 +638,12 @@ async def build_item_embed_talar(ctx, self):
 
 async def build_item_embed_talary(ctx, self, item_id: int, country_id: int, item_query: list):
     province_query = db.pax_engine.connect().execute(text(
-        f'SELECT item_id, item_name, item_color, item_image_url, item_desc, quantity, item_good '
+        f'SELECT item_id, item_name, item_color, item_image_url, item_desc, quantity, item_type '
         f'FROM items NATURAL JOIN inventories '
         f'WHERE item_id = "{item_id}" AND country_id = "{country_id}"'
     )).fetchone()
-    user = await interactions.get(self.bot, interactions.User, object_id=ctx.author.id)
-    embed_thumbnail = interactions.EmbedImageStruct(
+    user = ctx.author
+    embed_thumbnail = interactions.EmbedAttachment(
         url=item_query[3]
     )
     embed_author = interactions.EmbedAuthor(
@@ -642,7 +680,7 @@ async def build_item_embed_talary(ctx, self, item_id: int, country_id: int, item
 async def build_item_embed(ctx, self, item_id: int, country_id: int):
     # Get all info from database
     item_query = db.pax_engine.connect().execute(text(
-        f'SELECT item_id, item_name, item_color, item_image_url, item_desc, quantity, item_good '
+        f'SELECT item_id, item_name, item_color, item_image_url, item_desc, quantity, item_type '
         f'FROM items NATURAL JOIN inventories '
         f'WHERE item_id = "{item_id}" AND country_id = "{country_id}"'
     )).fetchone()
@@ -668,7 +706,7 @@ async def build_item_embed_admin(item_id: int):
     )).fetchall()
     query = list(query[0])
     # Creating embed elements
-    embed_thumbnail = interactions.EmbedImageStruct(
+    embed_thumbnail = interactions.EmbedAttachment(
         url=query[4]
     )
     f1 = interactions.EmbedField(name="Opis", value=f"```{query[2]}```", inline=True)
@@ -688,7 +726,7 @@ async def build_item_embed_admin(item_id: int):
 # /commands
 author = interactions.EmbedAuthor(name="[] - Wymagane, () - Opcjonalne, {} - Dla adminów",
                                   icon_url="https://i.imgur.com/4MFkrcH.png")
-fb = interactions.EmbedField(name="", value="", inline=False)
+fb = interactions.EmbedField(name=" ", value=" ", inline=False)
 
 
 def commands():
@@ -879,6 +917,10 @@ def ic_map():
         author=author,
         fields=[f1, f3, fb, f2, f4, f5]
     )
+    print(f1)
+    print(f2)
+    print(fb)
+
     return embed
 
 
@@ -1456,6 +1498,8 @@ def ic_province_rename():
 """
 Guess I will just sneak in with my own code here too - red
 """
+
+
 def bt_list(buildings):
     list = ""
     for i, building in enumerate(buildings):
@@ -1468,7 +1512,6 @@ def bt_list(buildings):
         title="Budynki",
         description="Lista wszystkich budynków dostępnych dla twojego państwa.",
         author=author,
-        inline=True,
         fields=[f1]
     )
     return embed
@@ -1482,7 +1525,7 @@ def bt_detail(building, connection):
     income = connection.execute(text(f'SELECT item_name, item_quantity FROM buildings_production NATURAL JOIN items '
                                      f'WHERE building_id = {building[0]};')).fetchall()
     print(income)
-    income = pandas.DataFrame(income, columns=['Przedmiot', 'Przychód'])
+    income = pd.DataFrame(income, columns=['Przedmiot', 'Przychód'])
 
     print(income.to_markdown(index=False))
     f2 = interactions.EmbedField(
@@ -1491,9 +1534,8 @@ def bt_detail(building, connection):
     )
     embed = interactions.Embed(
         title=f'{building[1]}',
-        desc=building[2],
-        thumbnail=interactions.EmbedImageStruct(url=building[4]),
-        inline=False,
+        description=building[2],
+        thumbnail=interactions.EmbedAttachment(url=building[4]),
         fields=[f1, f2]
     )
     return embed

@@ -1,7 +1,6 @@
 import time
 
 import interactions
-import numpy as np
 from wand.image import Image
 from wand.drawing import Drawing
 from wand.color import Color
@@ -45,38 +44,45 @@ class Map(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @interactions.extension_command(description='Zapytaj kartografa o mapy.', scope='917078941213261914')
-    @interactions.option(name='mapa', description='Jaka mapa?',
-                         choices=[interactions.Choice(name="Prowincji", value="provinces"),
-                                  interactions.Choice(name="Regionów", value="regions"),
-                                  interactions.Choice(name="Terenów", value="terrains"),
-                                  interactions.Choice(name="Zasobów", value="goods"),
-                                  interactions.Choice(name="Polityczna", value="countries"),
-                                  interactions.Choice(name="Religii", value="religions"),
-                                  interactions.Choice(name="Populacji", value="pops"),
-                                  interactions.Choice(name="Pusta", value="empty")]
-                         )
-    @interactions.option(name='kontury', description='Dodać kontury prowincji?',
-                         choices=[interactions.Choice(name="Nie", value="no"),
-                                  interactions.Choice(name="Tak", value="yes")]
-                         )
-    @interactions.option(name='adnotacje', description='Jakie informacje chcesz?',
-                         choices=[interactions.Choice(name="Żadne", value="none"),
-                                  interactions.Choice(name="ID Prowincji", value="province_id"),
-                                  interactions.Choice(name="Nazwy Prowincji", value="province_name"),
-                                  interactions.Choice(name="Nazwy Regionów", value="region_name"),
-                                  interactions.Choice(name="Nazwy Państw", value="country_name"),
-                                  interactions.Choice(name="Armie", value="army")]
-                         )
-    @interactions.option(name='admin', description='Jesteś admin?')
-    async def map(self, ctx: interactions.CommandContext,
-                  map_type: str, borders: str, information: str, admin: str = ''):  # legend: str
+    @interactions.slash_command(description='Zapytaj kartografa o mapy.', scopes=[917078941213261914])
+    @interactions.slash_option(name='mapa', description='Jaka mapa?',
+                               opt_type=interactions.OptionType.STRING,
+                               required=True,
+                               choices=[interactions.SlashCommandChoice(name="Prowincji", value="provinces"),
+                                        interactions.SlashCommandChoice(name="Regionów", value="regions"),
+                                        interactions.SlashCommandChoice(name="Terenów", value="terrains"),
+                                        interactions.SlashCommandChoice(name="Zasobów", value="goods"),
+                                        interactions.SlashCommandChoice(name="Polityczna", value="countries"),
+                                        interactions.SlashCommandChoice(name="Religii", value="religions"),
+                                        interactions.SlashCommandChoice(name="Populacji", value="pops"),
+                                        interactions.SlashCommandChoice(name="Pusta", value="empty")]
+                               )
+    @interactions.slash_option(name='kontury', description='Dodać kontury prowincji?',
+                               opt_type=interactions.OptionType.STRING,
+                               required=True,
+                               choices=[interactions.SlashCommandChoice(name="Nie", value="no"),
+                                        interactions.SlashCommandChoice(name="Tak", value="yes")]
+                               )
+    @interactions.slash_option(name='adnotacje', description='Jakie informacje chcesz?',
+                               opt_type=interactions.OptionType.STRING,
+                               required=True,
+                               choices=[interactions.SlashCommandChoice(name="Żadne", value="none"),
+                                        interactions.SlashCommandChoice(name="ID Prowincji", value="province_id"),
+                                        interactions.SlashCommandChoice(name="Nazwy Prowincji", value="province_name"),
+                                        interactions.SlashCommandChoice(name="Nazwy Regionów", value="region_name"),
+                                        interactions.SlashCommandChoice(name="Nazwy Państw", value="country_name"),
+                                        interactions.SlashCommandChoice(name="Armie", value="army")]
+                               )
+    @interactions.slash_option(name='admin', description='Jesteś admin?', opt_type=interactions.OptionType.STRING)
+    async def map(self, ctx: interactions.SlashContext,
+                  mapa: str, kontury: str, adnotacje: str, admin: str = ''):  # legend: str
+        map_type, borders, information, admin = mapa, kontury, adnotacje, admin
 
         # START THE CLOCK
         st = time.time()
         # PaxBot is thinking...
         await ctx.defer()
-        is_admin = await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR)
+        is_admin = ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR)
 
         def map_thread():
             title = ""
@@ -199,8 +205,8 @@ class Map(interactions.Extension):
                                     draw.fill_color = Color(f'#00000000')
                                     draw.color(row[0], row[1], 'replace')
                                 case _:
-                                    r = int((254 - ((row[2] - low_pop) * clr))/2)
-                                    g = int((1 + ((row[2] - low_pop) * clr))/2)
+                                    r = int((254 - ((row[2] - low_pop) * clr)) / 2)
+                                    g = int((1 + ((row[2] - low_pop) * clr)) / 2)
                                     print(r, g, diff, clr)
                                     draw.fill_color = Color(f'#{r:02x}{g:02x}00')
                                     draw.color(row[0], row[1], 'replace')
@@ -238,7 +244,7 @@ class Map(interactions.Extension):
                 case "province_name":
                     fi.scale(3256, 3256)
                     f_size = 20
-                    off = int(f_size/2)
+                    off = int(f_size / 2)
                     table = db.pax_engine.connect().execute(text(
                         "SELECT province_name, pixel_capital_x, pixel_capital_y FROM provinces"))
                     final_table = table.fetchall()
@@ -250,7 +256,7 @@ class Map(interactions.Extension):
                         draw.text_alignment = 'center'
                         for row in final_table:
                             province_text = row[0].replace(' ', '\n')
-                            draw.text(row[1]*2, row[2]*2+off, f"{province_text}")
+                            draw.text(row[1] * 2, row[2] * 2 + off, f"{province_text}")
                         draw(fi)
                     with Drawing() as draw:
                         draw.font = 'Times New Roman'
@@ -259,7 +265,7 @@ class Map(interactions.Extension):
                         draw.text_alignment = 'center'
                         for row in final_table:
                             province_text = row[0].replace(' ', '\n')
-                            draw.text(row[1]*2, row[2]*2+off, f"{province_text}")
+                            draw.text(row[1] * 2, row[2] * 2 + off, f"{province_text}")
                         draw(fi)
                     title = f"{title}, z nazwami prowincji."
                 case "region_name":
@@ -320,7 +326,7 @@ class Map(interactions.Extension):
                     if admin == "admin" and is_admin:
                         admin_bool = True
                         for i in range(321):
-                            province_vision.append(i+1)
+                            province_vision.append(i + 1)
                         province_vision_list = province_vision
                         province_vision = str(province_vision).replace('[', '(').replace(']', ')')
                     else:
@@ -382,7 +388,7 @@ class Map(interactions.Extension):
                                 manpower += int(row2[1] * (row2[0] / 100))
                                 units += 1
                         if units >= 1:
-                            temp_row = (int(strenght/units), manpower, row[2], row[3], row[4], row[5], row[6])
+                            temp_row = (int(strenght / units), manpower, row[2], row[3], row[4], row[5], row[6])
                             if temp_row not in result:
                                 result.append(temp_row)
                     # Sort it into a list of lists of tuples, so multiple countries can stand on one province.

@@ -6,9 +6,7 @@ from cogs import *
 from prototype import *
 from config.colorful import Colorful, timestamp
 with open("./config/config.json") as f:
-    config = json.load(f)
-with open("./config/token.json") as f:
-    token = json.load(f)
+    configure = json.load(f)
 
 from database import *
 
@@ -19,11 +17,12 @@ intents.message_content = True
 
 """Declare bot and add all cogs"""
 # bot = commands.Bot(command_prefix=config['Prefix'], intents=intents)
-bot = interactions.Client(token=token['Token'], intents=intents, logging=logging.INFO)
-try:
-    defdump.load_extensions(bot)
-except interactions.LibraryException as e:
-    print(e)
+bot = interactions.Client(token=configure['TOKEN'], intents=intents, logging=logging.INFO)
+
+bot.load_extension('interactions.ext.sentry', dsn="https://3cdb51a1282cf049c4565735aad4d413@o4507509505458176.ingest.de.sentry.io/4507509639282768")
+
+defdump.load_extensions(bot)
+
 
 @bot.event
 async def on_ready():
@@ -36,7 +35,7 @@ async def on_ready():
 
 
 @bot.event
-async def on_command(ctx: interactions.CommandContext):
+async def on_command(ctx: interactions.SlashContext):
     try:
         options = f'{ctx.data.options[0].name}, {[f"{o.name}:{o.value}" for o in ctx.data.options[0].options]}'
         if ctx.data.options[0].name is not None:

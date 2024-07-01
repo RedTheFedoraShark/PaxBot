@@ -11,7 +11,7 @@ class Template(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @interactions.extension_command(
+    @interactions.slash_command(
         name="ping"
     )
     async def ping(self, ctx):

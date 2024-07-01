@@ -5,18 +5,19 @@ import sqlalchemy
 from sqlalchemy import create_engine
 from sqlalchemy_utils import database_exists
 from config import colorful
-with open('config/db.json') as f:
-    dbconfig = json.load(f)# database config
 from sys import platform
 import os
 
+with open("./config/config.json") as f:
+    configure = json.load(f)
+
 SQL_PAX_URL = '{DRIVER}://{UNAME}:{PASSWD}@{HOST}/{DB_NAME}'.format(
-    DRIVER=dbconfig['DB_DRIVER'],
-    UNAME=dbconfig['DB_USER'],
-    PASSWD=dbconfig['DB_PASSWD'],
-    HOST=dbconfig['DB_HOST'],
-    PORT=dbconfig['DB_PORT'],
-    DB_NAME=dbconfig['DB_NAME']
+    DRIVER=configure['DB_DRIVER'],
+    UNAME=configure['DB_USER'],
+    PASSWD=configure['DB_PASSWD'],
+    HOST=configure['DB_HOST'],
+    PORT=configure['DB_PORT'],
+    DB_NAME=configure['DB_NAME']
 )
 
 
@@ -50,12 +51,12 @@ def backup():
     match sys.platform:
         case 'linux':
             try:
-                os.system(f"mysqldump -h {dbconfig['DB_HOST']} -u {dbconfig['DB_USER']} -p{dbconfig['DB_PASSWD']} > '.\\backups\\$(date +\"F_%H-%M-%S\").sql'")
+                os.system(f"mysqldump -h {configure['DB_HOST']} -u {configure['DB_USER']} -p{configure['DB_PASSWD']} > '.\\backups\\$(date +\"F_%H-%M-%S\").sql'")
             except:
                 return False
         case 'win32':
             try:
-                os.system(f"mysqldump -h {dbconfig['DB_HOST']} -u {dbconfig['DB_USER']} -p{dbconfig['DB_PASSWD']} pax > .\\database\\backups\\pierdolę_windowsa.sql")
+                os.system(f"mysqldump -h {configure['DB_HOST']} -u {configure['DB_USER']} -p{configure['DB_PASSWD']} pax > .\\database\\backups\\pierdolę_windowsa.sql")
             except:
                 return False
     return True

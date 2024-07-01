@@ -78,6 +78,7 @@ class Template(interactions.Extension):
                     text(f'SELECT province_id, province_name, building_name'))
 
             elif country != '':
+                await ctx.send('Dupa')
         else:
             pass
 

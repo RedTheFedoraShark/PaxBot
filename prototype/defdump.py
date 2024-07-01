@@ -9,7 +9,7 @@ def load_extensions(bot):
     #bot.load("cogs.template")
     for module in cogs.__init__.__all__:
         #try:
-            bot.load('cogs.' + module)
+            bot.load_extension('cogs.' + module)
             print(timestamp() + Colorful.CBLUE + 'ADDING:\t', Colorful.CGREEN + module + Colorful.CEND)
             loaded += 1
 

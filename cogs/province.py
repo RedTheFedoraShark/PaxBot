@@ -4,15 +4,18 @@ from sqlalchemy import text
 import pandas as pd
 import numpy as np
 from config import models
-from interactions.ext.paginator import Page, Paginator
+from interactions.ext.paginators import Paginator
+import json
+
+with open("./config/config.json") as f:
+    configure = json.load(f)
 
 
 def province_income(income: list, province_id: int):
     connection = db.pax_engine.connect()
     # 1.1 Grabbing modifiers for the province (pops, autonomy and terrains)
     query = connection.execute(
-        text(f"SELECT SUM(building_workers * quantity), province_pops, province_autonomy, terrain_id, "
-             f"country_id "
+        text(f"SELECT SUM(building_workers * quantity), province_pops, terrain_id, country_id "
              f"FROM provinces NATURAL JOIN structures NATURAL JOIN buildings "
              f"WHERE province_id = {province_id}")).fetchone()
     if query[0] is None and query[4] in (253, 254, 255):
@@ -62,21 +65,23 @@ class Province(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @interactions.extension_command(description='Testuj.', scope='917078941213261914')
+    @interactions.slash_command(description='Testuj.', scopes=[configure['GUILD']])
     async def province(self, ctx):
         pass
 
-    @province.subcommand(description="Lista prowincji twojego państwa.")
-    @interactions.option(name='tryb', description='W jakim trybie wyświetlić informacje?',
-                         choices=[interactions.Choice(name="Dokładny", value="pages"),
-                                  interactions.Choice(name="Prosty", value="list")])
-    @interactions.option(name='admin', description='Jesteś admin?')
-    async def list(self, ctx: interactions.CommandContext, tryb: str, admin: str = ''):
+    @province.subcommand(sub_cmd_description="Lista prowincji twojego państwa.")
+    @interactions.slash_option(name='tryb', description='W jakim trybie wyświetlić informacje?',
+                               opt_type=interactions.OptionType.STRING, required=True,
+                               choices=[interactions.SlashCommandChoice(name="Dokładny", value="pages"),
+                                        interactions.SlashCommandChoice(name="Prosty", value="list")])
+    @interactions.slash_option(name='admin', description='Jesteś admin?',
+                               opt_type=interactions.OptionType.STRING, )
+    async def list(self, ctx: interactions.SlashContext, tryb: str, admin: str = ''):
         # God forgive me for what I have done with this code.
         await ctx.defer()
         country_id = False
         index = 0
-        if admin != "" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+        if admin != "" and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
             admin_bool = True
             if admin.startswith('<@') and admin.endswith('>'):  # if a ping
                 country_id = db.pax_engine.connect().execute(text(
@@ -99,7 +104,7 @@ class Province(interactions.Extension):
                         f'SELECT province_id FROM provinces NATURAL JOIN countries '
                         f'WHERE country_id = {country_id[0]} OR controller_id = {country_id[0]}')).fetchall()
                 else:
-                    province_ids = list((x, ) for x in range(1, 322))
+                    province_ids = list((x,) for x in range(1, 322))
             else:
                 country_id = db.pax_engine.connect().execute(text(
                     f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = "{ctx.author.id}"'
@@ -119,23 +124,17 @@ class Province(interactions.Extension):
                 # if returned value is a list, unpack it
                 if isinstance(page, list):
                     for p in page:
-                        pages.append(Page(embeds=p))
+                        pages.append(p)
                 else:
-                    pages.append(Page(embeds=page))
+                    pages.append(page)
             if len(pages) > 25:
                 use = True
             else:
                 use = False
-            await Paginator(
-                client=self.bot,
-                ctx=ctx,
-                author_only=True,
-                timeout=600,
-                use_index=use,
-                index=index,
-                message="test",
-                pages=pages
-            ).run()
+
+            paginator = Paginator.create_from_embeds(ctx.client, *pages)
+            paginator.page_index = index
+            await paginator.send(ctx=ctx)
         else:
             if admin_bool:
                 if country_id:
@@ -153,26 +152,23 @@ class Province(interactions.Extension):
                 df = df.to_markdown(index=False).split("\n")
                 pages = await models.pagify(df)
 
-                await Paginator(
-                    client=self.bot,
-                    ctx=ctx,
-                    author_only=True,
-                    timeout=600,
-                    message="test",
-                    pages=pages
-                ).run()
+                paginator = Paginator.create_from_embeds(ctx.client, *pages)
+                paginator.page_index = index
+                await paginator.send(ctx=ctx)
 
-    @province.subcommand(description="Zmiana nazwy twojej prowincji.")
-    @interactions.option(name='nazwa', description='#ID albo obecna nazwa prowincji.')
-    @interactions.option(name='nowa_nazwa', description='Nowa nazwa prowincji do 17 znaków.')
-    async def rename(self, ctx: interactions.CommandContext, nazwa: str, nowa_nazwa: str):
+    @province.subcommand(sub_cmd_description="Zmiana nazwy twojej prowincji.")
+    @interactions.slash_option(name='nazwa', description='#ID albo obecna nazwa prowincji.',
+                               opt_type=interactions.OptionType.STRING, required=True)
+    @interactions.slash_option(name='nowa_nazwa', description='Nowa nazwa prowincji do 17 znaków.',
+                               opt_type=interactions.OptionType.STRING, required=True)
+    async def rename(self, ctx: interactions.SlashContext, nazwa: str, nowa_nazwa: str):
         await ctx.defer()
         # Don't read this either.
         country_id = db.pax_engine.connect().execute(text(
-                f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
-            )).fetchone()
+            f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
+        )).fetchone()
 
-        if await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+        if ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
             admin_bool = True
         else:
             admin_bool = False
@@ -222,12 +218,12 @@ class Province(interactions.Extension):
 
     """
     @interactions.extension_command(description='dummy')
-    async def province(self, ctx: interactions.CommandContext):
+    async def province(self, ctx: interactions.SlashContext):
         return
 
     @province.subcommand(description='')
-    @interactions.option(name='country', description='Podaj nazwę państwa lub oznacz gracza')
-    async def list(self, ctx: interactions.CommandContext(), country: str):
+    @interactions.slash_option(name='country', description='Podaj nazwę państwa lub oznacz gracza')
+    async def list(self, ctx: interactions.SlashContext(), country: str):
 
         await ctx.defer()
         connection = db.pax_engine.connect()

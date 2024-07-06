@@ -2,10 +2,12 @@ import interactions
 from database import *
 from sqlalchemy import text
 from config import models
-from interactions.ext.paginators import Page, Paginator
+from interactions.ext.paginators import Paginator
+import json
 
+with open("./config/config.json") as f:
+    configure = json.load(f)
 
-# all class names from this file have to be included in def below
 def setup(bot):
     Inventory(bot)
 
@@ -15,7 +17,7 @@ class Inventory(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @interactions.slash_command(description='Zarządzanie ekwipunkiem', scopes=['917078941213261914'])
+    @interactions.slash_command(description='Zarządzanie ekwipunkiem', scopes=[configure['GUILD']])
     async def inventory(self, ctx: interactions.SlashContext):
         return
 

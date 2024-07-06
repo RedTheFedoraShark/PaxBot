@@ -5,24 +5,51 @@ import re
 import pandas as pd
 from database import *
 from sqlalchemy import text
+import roman
 
 with open("./config/config.json") as f:
     configure = json.load(f)
 
 
+# Create an author element with country info for an embed
+async def country_author(self, country_id: int):
+    connection = db.pax_engine.connect()
+    query = connection.execute(text(
+        f"""SELECT 
+                  c.country_id,
+                  c.country_name,
+                  p.player_id,
+                  c.country_image_url,
+                  c.country_bio_url
+                FROM 
+                  countries c
+                  NATURAL JOIN players p
+                WHERE 
+                  c.country_id = {country_id};
+              """)).all()
+
+    owners = ''
+    for row in query:
+        member = await self.bot.fetch_member(user_id=row[2], guild_id=configure['GUILD'])
+        user = member.user
+        owners = f"{user.tag} {owners}"
+
+    country_id, country_name, player_id, country_image_url, country_bio_url = query[0]
+
+    return interactions.EmbedAuthor(name=f'{country_name}, {owners}', icon_url=country_image_url, url=country_bio_url)
+
+
 # Pagify a table string
-async def pagify(dataframe: list):
+async def pagify(dataframe: list, max: int):
     bit = ''
     bits = []
     for i, line in enumerate(dataframe):
-        if len(bit) > 1860 or i == len(dataframe) - 1:
+        if len(bit) > max or i == len(dataframe) - 1:
             bits.append(bit)
             bit = ''
         bit = f"{bit}\n{line}"
-    pages = []
-    for i, bit in enumerate(bits):
-        pages.append(interactions.Embed(title=str(i+1) + ". Strona", description=f"```ansi\n{bit}```"))
-    return pages
+
+    return bits
 
 
 # Build an army info table as tabulated strings and return them as a list of strings
@@ -57,7 +84,8 @@ Prwnc: $                        $
 Pchdz: $""")
 
         word_list = [f"{aname} #{aid}", f"{vis}", f"{uname} #{uid}", f"{lmoves}/{moves}", f"{tname} #{tid}",
-                     f"{cname}", f"{pname} #{pid}", f"{int(quan/100*astr)}/{quan} {astr}%", f"{oname} #{oid}"]
+                     f"{cname}", f"{pname} #{pid}", f"{int(astr)}/{quan} {int((astr / quan) * 100)}%",
+                     f"{oname} #{oid}"]
 
         for n, i in enumerate(indexes):
             new_field[indexes[n]: indexes[n] + len(word_list[n])] = list(word_list[n])
@@ -71,11 +99,11 @@ Pchdz: $""")
 async def build_army_list(country_id: int):
     connection = db.pax_engine.connect()
     table = connection.execute(text(
-          f"""SELECT 
+        f"""SELECT 
               a.army_name, 
               a.army_id, 
-              a.unit_name, 
-              a.unit_id, 
+              a.army_unit_name, 
+              a.army_unit_id, 
               ut.unit_name, 
               ut.unit_template_id, 
               uc.item_quantity, 
@@ -98,12 +126,12 @@ async def build_army_list(country_id: int):
     df2 = pd.DataFrame(columns=[
         'Armia (ID)', 'Jednostka (ID)', 'Typ Jednostki (ID)', 'Liczebność', 'Prwnc', 'Ruch'])
     for i, row in df.iterrows():
-        army = f"{row[0]} ({row[1]})"
-        unit = f"{row[2]} ({row[3]})"
-        template = f"{row[4]} ({row[5]})"
-        quantity = f"{int(row[6] / 100 * row[7])}/{row[6]} {row[7]}%"
-        province = f"#{row[8]}"
-        movement = f"{row[9]}/{row[10]}"
+        army = f"{row.iloc[0]} ({row.iloc[1]})"
+        unit = f"{row.iloc[2]} ({row.iloc[3]})"
+        template = f"{row.iloc[4]} ({row.iloc[5]})"
+        quantity = f"{int(row.iloc[6] / 100 * row.iloc[7])}/{row.iloc[6]} {row.iloc[7]}%"
+        province = f"#{row.iloc[8]}"
+        movement = f"{row.iloc[9]}/{row.iloc[10]}"
         df2.loc[f'{i}'] = [army, unit, template, quantity, province, movement]
 
     return df2
@@ -112,11 +140,11 @@ async def build_army_list(country_id: int):
 async def build_army_list_admin():
     connection = db.pax_engine.connect()
     table = connection.execute(text(
-          f"""SELECT 
+        f"""SELECT 
               a.army_name, 
               a.army_id, 
-              a.unit_name, 
-              a.unit_id, 
+              a.army_unit_name, 
+              a.army_unit_id, 
               ut.unit_name, 
               ut.unit_template_id, 
               uc.item_quantity, 
@@ -138,12 +166,12 @@ async def build_army_list_admin():
     df2 = pd.DataFrame(columns=[
         'Armia (ID)', 'Jednostka (ID)', 'Typ Jednostki (ID)', 'Liczebność', 'Prwnc', 'Ruch'])
     for i, row in df.iterrows():
-        army = f"{row[0]} ({row[1]})"
-        unit = f"{row[2]} ({row[3]})"
-        template = f"{row[4]} ({row[5]})"
-        quantity = f"{int(row[6] / 100 * row[7])}/{row[6]} {row[7]}%"
-        province = f"#{row[8]}"
-        movement = f"{row[9]}/{row[10]}"
+        army = f"{row.iloc[0]} ({row.iloc[1]})"
+        unit = f"{row.iloc[2]} ({row.iloc[3]})"
+        template = f"{row.iloc[4]} ({row.iloc[5]})"
+        quantity = f"{int(row.iloc[6] / 100 * row.iloc[7])}/{row.iloc[6]} {row.iloc[7]}%"
+        province = f"#{row.iloc[8]}"
+        movement = f"{row.iloc[9]}/{row.iloc[10]}"
         df2.loc[f'{i}'] = [army, unit, template, quantity, province, movement]
 
     return df2
@@ -152,13 +180,13 @@ async def build_army_list_admin():
 # /army order
 async def build_army_order_move(country_id):
     move_orders = db.pax_engine.connect().execute(text(
-        f'SELECT mo.order_id, a.army_name, a.army_id, a.unit_name, a.unit_id, '
+        f'SELECT mo.order_id, a.army_name, a.army_id, a.army_unit_name, a.army_unit_id, '
         f'p1.province_name, p1.province_id, p2.province_name, p2.province_id, mo.datetime '
         f'FROM movement_orders mo NATURAL JOIN armies a '
         f'INNER JOIN provinces p1 ON mo.origin_province_id = p1.province_id '
         f'INNER JOIN provinces p2 ON mo.target_province_id = p2.province_id '
         f'WHERE a.country_id = {country_id[0]} '
-        f'ORDER BY datetime, order_id, army_id, unit_id ')).fetchall()
+        f'ORDER BY mo.datetime, mo.order_id, a.army_id, a.army_unit_id ')).fetchall()
 
     d = {}
     o = {}
@@ -258,14 +286,14 @@ ORDER BY
 
     df = pd.DataFrame(table, columns=[
         'Prowincja (ID)', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Status', 'Status2'])
+    df['Status'] = df['Status'].astype(str)
+    df['Status2'] = df['Status2'].astype(str)
     for i, row in df.iterrows():
         if df.at[i, 'Status'] == df.at[i, 'Status2']:
-            print(type(df.at[i, 'Status']))
-            print(type(country_id))
             df.at[i, 'Status'] = f"\u001b[0;32mKontrola\u001b[0;0m"
-        elif df.at[i, 'Status2'] == country_id:
+        elif df.at[i, 'Status2'] == str(country_id):
             df.at[i, 'Status'] = f"\u001b[0;33mOkupacja\u001b[0;0m"
-        elif df.at[i, 'Status'] == country_id:
+        elif df.at[i, 'Status'] == str(country_id):
             df.at[i, 'Status'] = f"\u001b[0;31mOkupacja\u001b[0;0m"
     df.drop(['Status2'], axis=1, inplace=True)
     return df
@@ -332,14 +360,17 @@ ORDER BY
 async def build_province_embed(province_id: int, country_id: int):
     embeds = []
     connection = db.pax_engine.connect()
-    province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name, cid1, cn1, cid2, cn2 = connection.execute(text(
-        f'SELECT province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name, '
-        f'c.country_id, c.country_name, cc.country_id, cc.country_name '
-        f'FROM provinces p NATURAL JOIN religions '
-        f'NATURAL JOIN terrains NATURAL JOIN goods '
-        f'NATURAL JOIN regions '
+    (province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name,
+     cid1, cn1, color, cid2, cn2, province_level, pop_limit, pop_income) = connection.execute(text(
+        f'SELECT p.province_id, p.province_name, rg.region_name, t.terrain_name, t.terrain_image_url, '
+        f'rl.religion_name, g.good_name, c.country_id, c.country_name, c.country_color, cc.country_id, cc.country_name, '
+        f'p.province_level, pl.province_pops_limit, pl.province_pops_income '
+        f'FROM provinces p NATURAL JOIN religions rl '
+        f'NATURAL JOIN terrains t NATURAL JOIN goods g '
+        f'NATURAL JOIN regions rg '
         f"INNER JOIN countries c ON p.country_id = c.country_id "
         f"INNER JOIN countries cc ON p.controller_id = cc.country_id "
+        f"NATURAL JOIN province_levels pl "
         f'WHERE province_id = {province_id}'
     )).fetchone()
     if country_id == 0:
@@ -356,12 +387,8 @@ async def build_province_embed(province_id: int, country_id: int):
                                           f"LEFT JOIN provinces ON armies.province_id = provinces.province_id "
                                           f"WHERE armies.army_origin = {province_id}")).fetchone()[0]
     conscripted = conscripted if conscripted is not None else 0
-    pop_field = pd.DataFrame([['Mieszkańcy:', f'{pops}'],
-                              ['Pracujący:',  f'{workers} ({int(int(workers) / int(pops) * 100)}%)'],
-                              ['Powołani:',   f'{conscripted}']], columns=['1234567890', '1234567890123456789012345'])
-    pop_field = pop_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
-    pop_field = re.sub('..\\n..', '\n', pop_field)
-    pop_field = pop_field.replace(' |', ' ')
+
+    # Coloring controller names
     if cid1 == country_id:
         cn1 = f"\u001b[0;32m{cn1}\u001b[0;0m"
     else:
@@ -370,25 +397,22 @@ async def build_province_embed(province_id: int, country_id: int):
         cn2 = f"\u001b[0;32m{cn2}\u001b[0;0m"
     else:
         cn2 = f"\u001b[0;31m{cn2}\u001b[0;0m"
+
+    # Creating fields
+    pop_field = pd.DataFrame([['Mieszkańcy:', f'{pops}/{pop_limit}'],
+                              ['Pracujący:', f'{workers} ({int(int(workers) / int(pops) * 100)}%)'],
+                              ['Powołani:', f'{conscripted}']], columns=['1234567890', '1234567890123456789012345'])
+    pop_field = pop_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
+    pop_field = re.sub('..\\n..', '\n', pop_field).replace(' |', ' ')
+
     status_field = pd.DataFrame([['Właściciel:', f'{cn1}'],
-                                ['Kontroler:',   f'{cn2}']],
+                                 ['Kontroler:', f'{cn2}']],
                                 columns=['1234567890', '1234567890123456789012345'])
     status_field = status_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
-    status_field = re.sub('..\\n..', '\n', status_field)
-    status_field = status_field.replace(' |', ' ')
+    status_field = re.sub('..\\n..', '\n', status_field).replace(' |', ' ')
 
-    ## Creating embed elements
-    #embed_footer = interactions.EmbedFooter(
-    #    text=query[13],
-    #    icon_url=query[14]
-    #)
-    #embed_thumbnail = interactions.EmbedImageStruct(
-    #    url=query[12]
-    #)
-    #embed_author = interactions.EmbedAuthor(
-    #    name=query[3],
-    #)
-    f0 = interactions.EmbedField(name="", value="", inline=False)
+    # Creating embed elements
+    f0 = interactions.EmbedField(name=" ", value=" ", inline=False)
     f1 = interactions.EmbedField(name="Region", value=f"```{region_name}```", inline=True)
     f2 = interactions.EmbedField(name="Teren", value=f"```{terrain_name}```", inline=True)
     f3 = interactions.EmbedField(name="Religia", value=f"```{religion_name}```", inline=True)
@@ -397,76 +421,20 @@ async def build_province_embed(province_id: int, country_id: int):
     f6 = interactions.EmbedField(name="Status", value=f"```ansi\n{status_field[2:-2]}```", inline=False)
     f7 = interactions.EmbedField(name="Budynki", value=f"```ansi\nWORK IN PROGRESS```", inline=False)
     f8 = interactions.EmbedField(name="Ekonomia", value=f"```ansi\nWORK IN PROGRESS```", inline=False)
-    f9 = interactions.EmbedField(name="Armie", value='', inline=False)
+    f9 = interactions.EmbedField(name="Armie", value=' ', inline=False)
     fields = [f1, f2, f0, f3, f4, f5, f6, f7, f8, f9]
-    armies = connection.execute(text(
-          f"""SELECT 
-              a.army_name, 
-              a.army_id, 
-              army_visible, 
-              a.unit_name, 
-              a.unit_id, 
-              a.army_movement, 
-              a.army_movement_left, 
-              a.unit_name,
-              a.unit_template_id, 
-              c.country_name, 
-              a.country_id, 
-              p1.province_name, 
-              a.province_id, 
-              uc.item_quantity, 
-              a.army_strenght, 
-              p2.province_name, 
-              a.army_origin 
-            FROM 
-              units u 
-              INNER JOIN armies a ON a.unit_template_id = u.unit_template_id 
-              INNER JOIN units_cost uc ON u.unit_template_id = uc.unit_template_id 
-              INNER JOIN provinces p1 ON a.province_id = p1.province_id 
-              INNER JOIN provinces p2 ON a.army_origin = p2.province_id 
-              INNER JOIN countries c ON a.country_id = c.country_id 
-            WHERE 
-              uc.item_id = 3
-            AND
-              a.province_id = {province_id}""")).fetchall()
-    print(armies)
-    a_fields = await build_army_info(armies, country_id)
-    army_fields = []
-    for army in a_fields:
-        army_fields.append(interactions.EmbedField(name="", value=f"```\n{army}```", inline=False))
-    print(len(army_fields))
-    if len(army_fields) <= 10:
-        first_fields = fields + army_fields
-    else:
-        first_fields = fields
-        for i, field in enumerate(army_fields):
-            if i < 10:
-                first_fields.append(field)
-                print(i)
-        temp_field = []
-        fields_table = []
-        for i in range(10, len(army_fields)):
-            if len(temp_field) < 24:
-                temp_field.append(army_fields[i])
-            else:
-                fields_table.append(temp_field)
-                temp_field = []
-        fields_table.append(temp_field)
-        for army_embed in fields_table:
-            embeds.insert(1, interactions.Embed(title=f"Armie w prowincji {province_name} (#{province_id})",
-
-                                                fields=[f7] + army_embed))
 
     image = interactions.EmbedAttachment(url=terrain_image_url)
     # Building the Embed
     embed = interactions.Embed(
-        #color=int(query[7], 16),
-        title=f"{province_name} (#{province_id})",
+        color=color,
+        title=f"{province_name} (#{province_id}), poziom {roman.toRoman(province_level)}",
         #url=query[11],
         #footer=embed_footer,
         #thumbnail=embed_thumbnail,
         #author=embed_author,
-        fields=first_fields
+        fields=fields,
+        images=[image]
     )
     embeds.insert(0, embed)
     connection.close()
@@ -545,9 +513,9 @@ async def build_country_embed(self, country_id: int):
     f2 = interactions.EmbedField(name="Ustrój", value=f"```{query[9]}```", inline=True)
     f3 = interactions.EmbedField(name="Stolica", value=f"```ansi\n{query3[0]} \u001b[0;30m({query[10]})```",
                                  inline=True)
-    f4 = interactions.EmbedField(name="Domena", value=f"```{query2[1]} prowincji.```", inline=True)
+    f4 = interactions.EmbedField(name="Domena", value=f"```{query2[1]} prowincji```", inline=True)
     f5 = interactions.EmbedField(name="Religia", value=f"```{query[16]}```", inline=True)
-    f6 = interactions.EmbedField(name="Populacja", value=f"```{query2[0]} osób.```", inline=True)
+    f6 = interactions.EmbedField(name="Populacja", value=f"```{query2[0]} osób```", inline=True)
     f7 = interactions.EmbedField(name="Dyplomacja", value=f"{query[15]}", inline=True)
     f8 = interactions.EmbedField(name="ID Kraju", value=f"{country_id} / {query4[0]}", inline=True)
 
@@ -631,7 +599,8 @@ async def build_item_embed_talar(ctx, self):
         fields=[f1]
     )
     meme = ("https://i.imgur.com/vv5uOH4.png", "https://i.imgur.com/PI9TTwZ.png", "https://i.imgur.com/KJFCoNA.png"
-            "https://i.imgur.com/yV4QfJM.png", "https://i.imgur.com/Rr7Ko4w.png", "https://i.imgur.com/L2DNU9a.png")
+                                                                                  "https://i.imgur.com/yV4QfJM.png",
+            "https://i.imgur.com/Rr7Ko4w.png", "https://i.imgur.com/L2DNU9a.png")
     embed.set_image(url=random.choice(meme))
     return embed
 
@@ -1030,7 +999,7 @@ def ic_army_list():
 
 
 def ic_army_templates():
-    f1 = interactions.EmbedField(name="[jednostka]", value=f"```ansi"
+    f1 = interactions.EmbedField(name="(jednostka)", value=f"```ansi"
                                                            f"\n\u001b[0;31m•Szablon jednostki\u001b[0;0m"
                                                            f"\nWyświetla szablon danej jednostki.```", inline=True)
     f2 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
@@ -1041,10 +1010,12 @@ def ic_army_templates():
                                                        f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
                                                        f"\nWyświetla szablony jednostek danego kraju.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/army template [Wojownicy]\u001b[0;0m```"
-                                       f"\nWyświela informacje o szablonie jednostki 'Wojownicy'.", inline=False)
+                                 value=f"```ansi\n\u001b[0;40m/army templates (Wojownicy)\u001b[0;0m```"
+                                       f"\nWyświela informacje o szablonie jednostki 'Wojownicy'."
+                                       f"```ansi\n\u001b[0;40m/building templates (Tartak)\u001b[0;0m```"
+                                       f"\nWyświela informacje o szablonie budynku 'Tartak'.", inline=False)
     embed = interactions.Embed(
-        title="/army template [jednostka] {admin}",
+        title="/army templates (jednostka) {admin}",
         description="Wyświetla informacje o szablonach jednostek państwa gracza.",
         author=author,
         fields=[f1, f2, f3]
@@ -1323,7 +1294,7 @@ def ic_building_list():
     f3 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/building list [Dokładny]\u001b[0;0m```"
                                        f"\nWyświela budynki w postaci stron."
-                                       f"```ansi\n\u001b[0;40m/army list [Prosty]\u001b[0;0m```"
+                                       f"```ansi\n\u001b[0;40m/building list [Prosty]\u001b[0;0m```"
                                        f"\nWyświela budynki w postaci listy.", inline=False)
     embed = interactions.Embed(
         title="/building list [tryb] {admin}",
@@ -1336,7 +1307,7 @@ def ic_building_list():
 
 
 def ic_building_templates():
-    f1 = interactions.EmbedField(name="[budynek]", value=f"```ansi"
+    f1 = interactions.EmbedField(name="(budynek)", value=f"```ansi"
                                                          f"\n\u001b[0;31m•Szablon budynku\u001b[0;0m"
                                                          f"\nWyświetla szablon danego budynku.```", inline=True)
     f2 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
@@ -1347,10 +1318,12 @@ def ic_building_templates():
                                                        f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
                                                        f"\nWyświetla szablony budynków danego kraju.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/building template [Tartak]\u001b[0;0m```"
+                                 value=f"```ansi\n\u001b[0;40m/building templates\u001b[0;0m```"
+                                       f"\nWyświela listę wszystkich szablonów dostępnych dla twojego państwa."
+                                       f"```ansi\n\u001b[0;40m/building templates (Tartak)\u001b[0;0m```"
                                        f"\nWyświela informacje o szablonie budynku 'Tartak'.", inline=False)
     embed = interactions.Embed(
-        title="/army template [budynek] {admin}",
+        title="/building templates (budynek) {admin}",
         description="Wyświetla informacje o szablonach budynków państwa gracza.",
         author=author,
         fields=[f1, f2, f3]
@@ -1495,29 +1468,96 @@ def ic_province_rename():
     return embed
 
 
-"""
-Guess I will just sneak in with my own code here too - red
-"""
+async def bt_list(self, country_id):
+    connection = db.pax_engine.connect()
+
+    building_message = ''
+    if country_id == '%':
+        building_ids = connection.execute(
+            text(f'''
+                SELECT 
+                  building_id
+                FROM 
+                  country_buildings 
+                WHERE
+                  country_id LIKE '{country_id}';
+                ''')).fetchall()
+    else:
+        building_ids = connection.execute(
+            text(f'''
+                SELECT 
+                  building_id
+                FROM 
+                  country_buildings 
+                WHERE
+                  country_id IN (255, {country_id});
+                ''')).fetchall()
+
+    for building_id in building_ids:
+        can_build = True
+
+        print(building_id)
+        building_costs = connection.execute(
+            text(f'''
+            SELECT 
+              b.building_emoji, b.building_name, it.item_emoji, it.item_name, bc.item_quantity, inv.quantity
+            FROM 
+              country_buildings cb NATURAL 
+              JOIN buildings b NATURAL 
+              JOIN buildings_cost bc NATURAL 
+              JOIN items it 
+              JOIN inventories inv ON it.item_id = inv.item_id 
+            WHERE 
+              bc.building_id = {building_id[0]};
+            ''')).fetchall()
+        building_emoji, building_name = building_costs[0][0], building_costs[0][1]
+        building_line = f'{building_emoji} **{building_name}** - Cost: '
+
+        for building_cost in building_costs:
+            item_emoji, item_name, cost, inventory = building_cost[2], building_cost[3], building_cost[4], building_cost[5]
+            if cost > inventory: # Not enough items
+                can_build = False
+                building_line = building_line + f'{item_emoji} {item_name} [{inventory}/{cost}], '
+            else:
+                building_line = building_line + f'{item_emoji} **{item_name} [{inventory}/{cost}]**, '
+
+        if can_build:
+            building_line = ":green_circle:" + building_line
+        else:
+            building_line = ":red_circle:" + building_line
+
+        building_message = building_message + building_line + '\n'
+    print(building_message)
+    print(len(building_message))
+
+    pages = await pagify(dataframe=building_message[:-2].split('\n'), max=3900)
+
+    country_color = connection.execute(
+        text(f'''
+                SELECT 
+                  country_color
+                FROM 
+                  countries 
+                WHERE
+                  country_id = {country_id};
+                ''')).fetchone()[0]
+
+    author = await country_author(self, country_id=country_id)
+    footer = interactions.EmbedFooter("test")
+
+    embeds = []
+    for page in pages:
+        embeds.append(interactions.Embed(
+            title="Budynki",
+            description=page,
+            author=author,
+            footer=footer,
+            color=int(country_color, 16)
+        ))
+    return embeds
 
 
-def bt_list(buildings):
-    list = ""
-    for i, building in enumerate(buildings):
-        list += f'{i+1} {building[3]} {building[1]}\n'
-    f1 = interactions.EmbedField(
-        name='Budynki',
-        value=list
-    )
-    embed = interactions.Embed(
-        title="Budynki",
-        description="Lista wszystkich budynków dostępnych dla twojego państwa.",
-        author=author,
-        fields=[f1]
-    )
-    return embed
-
-
-def bt_detail(building, connection):
+async def bt_detail(building, connection):
     f1 = interactions.EmbedField(
         name='test',
         value=building[2]

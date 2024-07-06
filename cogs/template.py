@@ -15,4 +15,4 @@ class Template(interactions.Extension):
         name="ping"
     )
     async def ping(self, ctx):
-        await ctx.send("Pong!")
+        await ctx.send("<:BetterGetKarl:1259091835167576064>")

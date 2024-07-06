@@ -2,7 +2,11 @@ import interactions
 from sqlalchemy import text
 from database import *
 from config import models
-from interactions.ext.paginator import Page, Paginator
+from interactions.ext.paginators import Paginator
+import json
+
+with open("./config/config.json") as f:
+    configure = json.load(f)
 
 
 # all class names from this file have to be included in def below
@@ -15,20 +19,23 @@ class Army(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @interactions.extension_command(description='Ściąga z komendami Pax Zeonica.', scope='917078941213261914')
+    @interactions.slash_command(description='Ściąga z komendami Pax Zeonica.', scopes=[configure['GUILD']])
     async def army(self, ctx):
         pass
 
-    @army.subcommand(description="Lista armii twojego państwa.")
-    @interactions.option(name='tryb', description='W jakim trybie wyświetlić informacje?',
-                         choices=[interactions.Choice(name="Dokładny", value="pages"),
-                                  interactions.Choice(name="Prosty", value="list")])
-    @interactions.option(name='admin', description='Jesteś admin?')
-    async def list(self, ctx: interactions.CommandContext, tryb: str, admin: str = ''):
+    @army.subcommand(sub_cmd_description="Lista armii twojego państwa.")
+    @interactions.slash_option(name='tryb', description='W jakim trybie wyświetlić informacje?',
+                               opt_type=interactions.OptionType.STRING, required=True,
+                               choices=[interactions.SlashCommandChoice(name="Dokładny", value="pages"),
+                                        interactions.SlashCommandChoice(name="Prosty", value="list")])
+    @interactions.slash_option(name='admin', description='Jesteś admin?',
+                               opt_type=interactions.OptionType.STRING, )
+    async def list(self, ctx: interactions.SlashContext, tryb: str, admin: str = ''):
         await ctx.defer()
         country_id = False
-        if admin != "" and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
-            admin_bool = True
+        index = 0
+        if admin != "" and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
+            admin_mode = True
             if admin.startswith('<@') and admin.endswith('>'):  # if a ping
                 country_id = db.pax_engine.connect().execute(text(
                     f'SELECT country_id FROM players NATURAL JOIN countries '
@@ -40,57 +47,62 @@ class Army(interactions.Extension):
                     f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{admin}"'
                 )).fetchone()
         else:
-            admin_bool = False
+            admin_mode = False
         if tryb == "pages":
-            if admin_bool:
+            if admin_mode:
                 print(f"CountryId {country_id}")
                 if country_id:
                     unit_ids = db.pax_engine.connect().execute(text(
-                        f'SELECT unit_id FROM armies NATURAL JOIN countries '
+                        f'SELECT army_unit_id FROM armies NATURAL JOIN countries '
                         f'WHERE country_id = {country_id[0]}')).fetchall()
                 else:
-                    # '%' is a wildcard for SQL select: SELECT unit_id FROM armies WHERE country_id = '%';
-                    unit_ids = '%'
+                    # '%' is a wildcard for SQL select: SELECT army_unit_id FROM armies WHERE country_id LIKE '%';
+                    unit_ids = db.pax_engine.connect().execute(text(
+                        'SELECT army_unit_id FROM armies NATURAL JOIN countries '
+                        'WHERE country_id LIKE "%"')).fetchall()
             else:
                 country_id = db.pax_engine.connect().execute(text(
                     f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = "{ctx.author.id}"'
                 )).fetchone()
+                print(f"CountryId {country_id}")
                 unit_ids = db.pax_engine.connect().execute(text(
-                    f'SELECT unit_id FROM armies NATURAL JOIN countries '
-                    f'WHERE country_id = {country_id[0]}')).fetchall()
-            non_dup_ids = set()
-            for x in unit_ids:
-                non_dup_ids.add(x[0])
-            non_dup_ids = sorted(non_dup_ids)
+                    f'SELECT army_unit_id FROM armies WHERE country_id = {country_id[0]}')).fetchall()
+                print(f"UnitIds {unit_ids}")
+            #non_dup_ids = set()
+            #for x in unit_ids:
+            #    non_dup_ids.add(x[0])
+            #non_dup_ids = sorted(non_dup_ids)
             pages = []
             if not country_id:
                 country_id = [0]
-            for x in non_dup_ids:
+
+            # Flatten the list
+            unit_ids = [
+                x
+                for xs in unit_ids
+                for x in xs
+            ]
+
+            for x in unit_ids:
                 #######################################################################################################
                 page = await models.build_province_embed(x, country_id[0])
                 # if returned value is a list, unpack it
                 if isinstance(page, list):
                     for p in page:
-                        pages.append(Page(embeds=p))
+                        pages.append(p)
                 else:
-                    pages.append(Page(embeds=page))
+                    pages.append(page)
             if len(pages) > 25:
                 use = True
             else:
                 use = False
-            await Paginator(
-                client=self.bot,
-                ctx=ctx,
-                author_only=True,
-                timeout=600,
-                use_index=use,
-                index=index,
-                message="test",
-                pages=pages
-            ).run()
+
+            paginator = Paginator.create_from_embeds(ctx.client, *pages)
+            await paginator.send(ctx=ctx)
+
             ###########################################################################################################
         else:
-            if admin_bool:
+            if admin_mode:
                 if country_id:
                     df = await models.build_army_list(country_id[0])  # To trzeba zrobić
                 else:
@@ -104,28 +116,31 @@ class Army(interactions.Extension):
                 await ctx.send(f"```ansi\n{df.to_markdown(index=False)}```")
             else:
                 df = df.to_markdown(index=False).split("\n")
-                pages = await models.pagify(df)
 
-                await Paginator(
-                    client=self.bot,
-                    ctx=ctx,
-                    author_only=True,
-                    timeout=600,
-                    message="test",
-                    pages=pages
-                ).run()
+                bits = await models.pagify(dataframe=df, max=1860)
+                pages = []
+                for i, bit in enumerate(bits):
+                    pages.append(interactions.Embed(title=str(i + 1) + ". Strona", description=f"```ansi\n{bit}```"))
 
-    @army.subcommand(description="Rekrutuje jednostki.")
-    @interactions.option(name='prowincja', description='Nazwa/ID prowincji.')
-    @interactions.option(name='jednostka', description='Nazwa/ID szablonu jednostki.')
-    @interactions.option(name='nazwa_jednostki', description='Nazwa nowej jednostki.')
-    @interactions.option(name='nazwa_armii', description='Nazwa nowej armii.')
-    @interactions.option(name='admin', description='Jesteś admin?')
-    async def recruit(self, ctx: interactions.CommandContext, prowincja: str, jednostka: str,
+                paginator = Paginator.create_from_embeds(ctx.client, *pages)
+                await paginator.send(ctx=ctx)
+
+    @army.subcommand(sub_cmd_description="Rekrutuje jednostki.")
+    @interactions.slash_option(name='prowincja', description='Nazwa/ID prowincji.',
+                               opt_type=interactions.OptionType.STRING, )
+    @interactions.slash_option(name='jednostka', description='Nazwa/ID szablonu jednostki.',
+                               opt_type=interactions.OptionType.STRING, )
+    @interactions.slash_option(name='nazwa_jednostki', description='Nazwa nowej jednostki.',
+                               opt_type=interactions.OptionType.STRING, )
+    @interactions.slash_option(name='nazwa_armii', description='Nazwa nowej armii.',
+                               opt_type=interactions.OptionType.STRING, )
+    @interactions.slash_option(name='admin', description='Jesteś admin?',
+                               opt_type=interactions.OptionType.STRING, )
+    async def recruit(self, ctx: interactions.SlashContext, prowincja: str, jednostka: str,
                       nazwa_jednostki: str = '', nazwa_armii: str = '', admin: str = ''):
         await ctx.defer()
 
-        if admin != '' and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+        if admin != '' and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
             if admin.startswith('<@') and admin.endswith('>'):  # if a ping
                 country_id = db.pax_engine.connect().execute(text(
                     f'SELECT country_id FROM players NATURAL JOIN countries '
@@ -147,13 +162,14 @@ class Army(interactions.Extension):
                 f'AND p.controller_id = {country_id}'
             )).fetchone()
             if not prov:
-                await ctx.send(f"```ansi\n\u001b[0;31mNie kontrolujesz\u001b[0;0m w pełni prowincji o ID #{prowincja[1:]}.```")
+                await ctx.send(
+                    f"```ansi\n\u001b[0;31mNie kontrolujesz\u001b[0;0m w pełni prowincji o ID #{prowincja[1:]}.```")
                 return
         else:
             prov = db.pax_engine.connect().execute(text(
                 f'SELECT p.province_id, p.province_name '
                 f'FROM provinces p '
-                f'WHERE province_id = "{nprowincja}" AND p.country_id = {country_id} '
+                f'WHERE province_id = "{prowincja}" AND p.country_id = {country_id} '
                 f'AND p.controller_id = {country_id}'
             )).fetchone()
             if not prov:
@@ -168,7 +184,8 @@ class Army(interactions.Extension):
                 f'WHERE u.unit_template_id = "{jednostka[1:]}" AND u.country_id = {country_id}'
             )).fetchone()
             if not unit:
-                await ctx.send(f"```ansi\nTwoje państwo \u001b[0;31mnie ma\u001b[0;0m szablonu jednostki o o ID #{jednostka[1:]}.```")
+                await ctx.send(
+                    f"```ansi\nTwoje państwo \u001b[0;31mnie ma\u001b[0;0m szablonu jednostki o o ID #{jednostka[1:]}.```")
                 return
         else:
             unit = db.pax_engine.connect().execute(text(
@@ -180,8 +197,6 @@ class Army(interactions.Extension):
                 await ctx.send(
                     f"```ansi\nTwoje państwo \u001b[0;31mnie ma\u001b[0;0m szablonu jednostki o nazwie {jednostka}.```")
                 return
-
-
 
         # Common Errors
         if len(nazwa_jednostki) > 20:
@@ -212,8 +227,9 @@ class Army(interactions.Extension):
             # teleport
             with db.pax_engine.connect() as conn:
                 conn.begin()
-                conn.execute(text(f'INSERT INTO armies (unit_template_id, country_id, province_id, army_id, army_visible) '
-                                  f'VALUES '))
+                conn.execute(
+                    text(f'INSERT INTO armies (unit_template_id, country_id, province_id, army_id, army_visible) '
+                         f'VALUES '))
                 conn.commit()
                 conn.close()
             await ctx.send(f"```ansi\nPomyślnie zespawnowano jednostkę '{old[0][5]}' #{old[0][4]}.\n"
@@ -222,13 +238,16 @@ class Army(interactions.Extension):
 
         # Player Errors
 
-    @army.subcommand(description="Zmienia nazwę jednostki lub armii państwa.")
-    @interactions.option(name='typ', description='Czemu chcesz zmienić nazwę?',
-                         choices=[interactions.Choice(name="Armia", value="army"),
-                                  interactions.Choice(name="Jednostka", value="unit")])
-    @interactions.option(name='nazwa', description='Stara nazwa/ID wojska.')
-    @interactions.option(name='nowa_nazwa', description='Nowa nazwa wojska.')
-    async def rename(self, ctx: interactions.CommandContext, typ: str, nazwa: str, nowa_nazwa: str):
+    @army.subcommand(sub_cmd_description="Zmienia nazwę jednostki lub armii państwa.")
+    @interactions.slash_option(name='typ', description='Czemu chcesz zmienić nazwę?',
+                               opt_type=interactions.OptionType.STRING,
+                               choices=[interactions.SlashCommandChoice(name="Armia", value="army"),
+                                        interactions.SlashCommandChoice(name="Jednostka", value="unit")])
+    @interactions.slash_option(name='nazwa', description='Stara nazwa/ID wojska.',
+                               opt_type=interactions.OptionType.STRING, )
+    @interactions.slash_option(name='nowa_nazwa', description='Nowa nazwa wojska.',
+                               opt_type=interactions.OptionType.STRING, )
+    async def rename(self, ctx: interactions.SlashContext, typ: str, nazwa: str, nowa_nazwa: str):
         await ctx.defer()
         country_id = db.pax_engine.connect().execute(text(
             f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
@@ -293,11 +312,14 @@ class Army(interactions.Extension):
         await ctx.send(f"```ansi\nPomyślnie zmieniono nazwę {second} #{old[0]}.\n"
                        f"\u001b[1;31m'{old[1]}'\u001b[0;0m ➤ \u001b[1;32m'{nowa_nazwa}'\u001b[0;0m```")
 
-    @army.subcommand(description="Dodaje rozkazy ruchu armii.")
-    @interactions.option(name='armia', description='Nazwa/ID armii.')
-    @interactions.option(name='granica', description='Do której prowincji chcesz ruszyć?')
-    @interactions.option(name='admin', description='Jesteś admin?')
-    async def move(self, ctx: interactions.CommandContext, armia: str, granica: str, admin: str = ''):
+    @army.subcommand(sub_cmd_description="Dodaje rozkazy ruchu armii.")
+    @interactions.slash_option(name='armia', description='Nazwa/ID armii.',
+                               opt_type=interactions.OptionType.STRING, )
+    @interactions.slash_option(name='granica', description='Do której prowincji chcesz ruszyć?',
+                               opt_type=interactions.OptionType.STRING, )
+    @interactions.slash_option(name='admin', description='Jesteś admin?',
+                               opt_type=interactions.OptionType.STRING, )
+    async def move(self, ctx: interactions.SlashContext, armia: str, granica: str, admin: str = ''):
         await ctx.defer()
 
         # set up basic variables
@@ -362,12 +384,12 @@ class Army(interactions.Extension):
         # this is where the fun begins
         # the current location is old[4], but check for newest order
         current_province = db.pax_engine.connect().execute(text(
-                f'SELECT target_province_id, province_name '
-                f'FROM movement_orders m '
-                f'INNER JOIN provinces p on m.target_province_id = p.province_id '
-                f'WHERE m.army_id = {old[0][4]} '
-                f'ORDER BY datetime DESC'
-            )).fetchone()
+            f'SELECT target_province_id, province_name '
+            f'FROM movement_orders m '
+            f'INNER JOIN provinces p on m.target_province_id = p.province_id '
+            f'WHERE m.army_id = {old[0][4]} '
+            f'ORDER BY datetime DESC'
+        )).fetchone()
         if not current_province:
             current_province = [old[0][2], old[0][3]]
 
@@ -379,8 +401,9 @@ class Army(interactions.Extension):
             f'OR (province_id_2 = {current_province[0]} AND province_id = {new[0]})'
         )).fetchone()
         if not border_type:
-            await ctx.send(f"```ansi\nNie ma granicy pomiędzy \u001b[0;31m'{current_province[1]}' #{current_province[0]}\u001b[0;0m "
-                           f"i \u001b[0;32m'{new[1]}' #{new[0]}\u001b[0;0m.```")
+            await ctx.send(
+                f"```ansi\nNie ma granicy pomiędzy \u001b[0;31m'{current_province[1]}' #{current_province[0]}\u001b[0;0m "
+                f"i \u001b[0;32m'{new[1]}' #{new[0]}\u001b[0;0m.```")
             return
         if border_type[0] == 0:
             await ctx.send(f"```ansi\nNie możesz wejść na \u001b[0;31mWasteland\u001b[0;0m.```")
@@ -408,13 +431,16 @@ class Army(interactions.Extension):
                        f"\u001b[1;31m'{current_province[1]}' #{current_province[0]}\u001b[0;0m ➤ \u001b[1;32m'{new[1]}' #{new[0]}\u001b[0;0m```")
         return
 
-    @army.subcommand(description="Wyświetla rozkazy armii.")
-    @interactions.option(name='typ', description='Które rozkazy chcesz wyświetlić?',
-                         choices=[interactions.Choice(name="recruit", value="recruit"),
-                                  interactions.Choice(name="reinforce", value="reinforce"),
-                                  interactions.Choice(name="move", value="move")])
-    @interactions.option(name='admin', description='Jesteś admin?')
-    async def orders(self, ctx: interactions.CommandContext, typ: str, admin: str = ''):
+    """
+    @army.subcommand(sub_cmd_description="Wyświetla rozkazy armii.")
+    @interactions.slash_option(name='typ', description='Które rozkazy chcesz wyświetlić?',
+                               opt_type=interactions.OptionType.STRING,
+                               choices=[interactions.SlashCommandChoice(name="recruit", value="recruit"),
+                                        interactions.SlashCommandChoice(name="reinforce", value="reinforce"),
+                                        interactions.SlashCommandChoice(name="move", value="move")])
+    @interactions.slash_option(name='admin', description='Jesteś admin?',
+                               opt_type=interactions.OptionType.STRING,)
+    async def orders(self, ctx: interactions.SlashContext, typ: str, admin: str = ''):
 
         if admin != '' and await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
             admin_bool = True
@@ -448,7 +474,7 @@ class Army(interactions.Extension):
                 f'INNER JOIN provinces p1 ON mo.origin_province_id = p1.province_id '
                 f'INNER JOIN provinces p2 ON mo.target_province_id = p2.province_id '
                 f'WHERE a.country_id = {country_id[0]} '
-                f'ORDER BY datetime, order_id, army_id, unit_id ')).fetchall()
+                f'ORDER BY datetime, order_id, army_id, army_unit_id ')).fetchall()
 
             if not move_orders:
                 await ctx.send(f"```ansi\nTen kraj nie ma rozkazów ruchu dla armii.[0;0m.```")
@@ -470,18 +496,20 @@ class Army(interactions.Extension):
                 message="test",
                 pages=pages
             ).run()
+            """
+
 
 """
     @interactions.extension_command(
         description="manage armies"
     )
-    async def army(self, ctx: interactions.CommandContext):
+    async def army(self, ctx: interactions.SlashContext):
         return
 
     @army.subcommand(
         description="List armies"
     )
-    async def list(self, ctx: interactions.CommandContext, target: str=None, admin: bool = False):
+    async def list(self, ctx: interactions.SlashContext, target: str=None, admin: bool = False):
         connection = db.pax_engine.connect()
         original_input = target
         MODE = 'country'

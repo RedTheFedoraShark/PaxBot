@@ -7,7 +7,7 @@ import time
 import json
 
 with open("./config/config.json") as f:
-    config = json.load(f)
+    configure = json.load(f)
 
 
 def setup(bot):
@@ -19,11 +19,11 @@ class Info(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @interactions.slash_command(description='Ściąga z komendami Pax Zeonica.', scopes=['917078941213261914'])
+    @interactions.slash_command(description='Ściąga z komendami Pax Zeonica.', scopes=[configure['GUILD']])
     async def commands(self, ctx):
         await ctx.send(embeds=models.commands())
 
-    @interactions.slash_command(description='Testuj', scopes=['917078941213261914'])  # , scope='917078941213261914'
+    @interactions.slash_command(description='Testuj', scopes=[configure['GUILD']])
     async def info(self, ctx: interactions.SlashContext):
         pass
 

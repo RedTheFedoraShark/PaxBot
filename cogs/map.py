@@ -10,7 +10,7 @@ import json
 import asyncio
 
 with open("./config/config.json") as f:
-    config = json.load(f)
+    configure = json.load(f)
 
 
 def setup(bot):
@@ -44,7 +44,7 @@ class Map(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @interactions.slash_command(description='Zapytaj kartografa o mapy.', scopes=[917078941213261914])
+    @interactions.slash_command(description='Zapytaj kartografa o mapy.', scopes=[configure['GUILD']])
     @interactions.slash_option(name='mapa', description='Jaka mapa?',
                                opt_type=interactions.OptionType.STRING,
                                required=True,
@@ -73,9 +73,9 @@ class Map(interactions.Extension):
                                         interactions.SlashCommandChoice(name="Nazwy Państw", value="country_name"),
                                         interactions.SlashCommandChoice(name="Armie", value="army")]
                                )
-    @interactions.slash_option(name='admin', description='Jesteś admin?', opt_type=interactions.OptionType.STRING)
+    @interactions.slash_option(name='admin', description='Jesteś admin?', opt_type=interactions.OptionType.BOOLEAN)
     async def map(self, ctx: interactions.SlashContext,
-                  mapa: str, kontury: str, adnotacje: str, admin: str = ''):  # legend: str
+                  mapa: str, kontury: str, adnotacje: str, admin: bool = False):  # legend: str
         map_type, borders, information, admin = mapa, kontury, adnotacje, admin
 
         # START THE CLOCK
@@ -112,7 +112,7 @@ class Map(interactions.Extension):
                         f"FROM goods NATURAL JOIN provinces")).fetchall()
 
                     admin_bool = False
-                    if admin == "admin" and is_admin:
+                    if admin and is_admin:
                         admin_bool = True
                     with Drawing() as draw:
                         for row in result:
@@ -336,7 +336,7 @@ class Map(interactions.Extension):
                         result = db.pax_engine.connect().execute(text(
                             f"SELECT province_id FROM provinces WHERE country_id = {author_id[0]}")).fetchall()
                         result1 = db.pax_engine.connect().execute(text(
-                            f"SELECT province_id, vision_range FROM armies WHERE country_id = {author_id[0]}")).fetchall()
+                            f"SELECT province_id, army_vision_range FROM armies WHERE country_id = {author_id[0]}")).fetchall()
                         result2 = db.pax_engine.connect().execute(text(
                             f"SELECT province_id, province_id_2 FROM borders")).fetchall()
                         # Making the vision of the player

@@ -24,74 +24,14 @@ class Building(interactions.Extension):
         pass
 
     @building.subcommand(sub_cmd_description='Lista twoich zbudowanych budynków')
-    @interactions.slash_option(name='province', description='#Id lub nazwa prowincji',
+    @interactions.slash_option(name='province', description='#Id lub nazwa prowincji', required=True,
                                opt_type=interactions.OptionType.STRING)
     @interactions.slash_option(name='country', description='Nazwa państwa lub ping',
                                opt_type=interactions.OptionType.STRING)
     @interactions.slash_option(name='admin', description='Admin?',
                                opt_type=interactions.OptionType.BOOLEAN)
     async def list(self, ctx: interactions.SlashContext, province: str = '', country: str = '', admin: bool = False):
-        if admin and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
-            is_admin = True
-        else:
-            is_admin = False
-
-        connection = db.pax_engine.connect()
-
-        province, country = province.strip(), country.strip()
-
-        if country.startswith('<@') and country.endswith('>'):  # if a ping
-            # id = panstwo[2:-1]
-            result = connection.execute(
-                text(
-                    f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {country[2:-1]}')).fetchone()
-            if result is None:
-                await ctx.send('Ten gracz nie ma przypisanego państwa.')
-                connection.close()
-                return
-            country = result[0]
-        elif country != '':
-            result = connection.execute(
-                text(f'SELECT country_id FROM countries WHERE country_name = "{country}"')).fetchone()
-            if result is None:
-                await ctx.send('Takie państwo nie istnieje.')
-                connection.close()
-                return
-        else:
-            country = connection.execute(
-                text(
-                    f'SELECT country_id from players NATURAL JOIN countries WHERE player_id = {ctx.author.id};')).fetchone()[
-                0]
-            if country is None:
-                if not is_admin:
-                    await ctx.send('Nie masz przypisanego państwa!')
-                else:
-                    await ctx.send('Państwo nie może być puste!')
-                return
-
-        if province[0] == '#':
-            result = connection.execute(
-                text(f'SELECT province_id FROM provinces WHERE province_id = {province[1:]};')).fetchone()
-            if result is None:
-                await ctx.send('Dupa')
-                return
-            province = result[0]
-        elif province != '':
-            province = connection.execute(
-                text(f'SELECT province_id FROM provinces WHERE province_name = "{province}";')).fetchone()[0]
-            if province is None:
-                await ctx.send('Pojebało cię dziewczynko')
-                return
-
-        if is_admin:
-            if province != '':
-                result = connection.execute(
-                    text(f'SELECT province_id, province_name, building_name'))
-
-            elif country != '':
-                await ctx.send('Dupa')
-        else:
-            pass
+        is_admin = admin and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR)
 
         return
 
@@ -107,21 +47,21 @@ class Building(interactions.Extension):
         connection = db.pax_engine.connect()
 
         if admin != '' and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
-            if admin.startswith('<@') and admin.endswith('>'):  # if a ping
-                country_id = db.pax_engine.connect().execute(text(
+            if admin == "admin":
+                country_id = '%'
+            elif admin.startswith('<@') and admin.endswith('>'):  # if a ping
+                country_id = connection.execute(text(
                     f'SELECT country_id FROM players NATURAL JOIN countries '
                     f'WHERE player_id = {admin[2:-1]}')).fetchone()[0]
             else:
-                country_id = db.pax_engine.connect().execute(text(
+                country_id = connection.execute(text(
                     f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{admin}"'
                 )).fetchone()[0]
         else:
-            country_id = db.pax_engine.connect().execute(text(
+            country_id = connection.execute(text(
                 f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
             )).fetchone()[0]
-
-        pages = [await models.bt_list(self, country_id=country_id)]
-        connection.close()
+        pages = await models.bt_list(self, country_id=country_id)
 
         if len(pages) == 1:
             await ctx.send(embed=pages[0])
@@ -129,85 +69,182 @@ class Building(interactions.Extension):
             paginator = Paginator.create_from_embeds(ctx.client, *pages)
             await paginator.send(ctx=ctx)
 
-        return
-
-    @building.subcommand(sub_cmd_description='Budowanie budynków')
-    @interactions.slash_option(name='building', description='Jaki budynek chcesz zbudować',
-                               opt_type=interactions.OptionType.STRING, required=True)
-    @interactions.slash_option(name='province', description='W jakiej prowincji chcesz zbudować budynek?',
-                               opt_type=interactions.OptionType.STRING, required=True)
-    @interactions.slash_option(name='admin', description='Admin?',
-                               opt_type=interactions.OptionType.BOOLEAN)
-    async def build(self, ctx: interactions.SlashContext, building: str, province: str, admin: bool):
-        connection = db.pax_engine.connect()
-        country = None
-        is_admin = ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR)
-        if admin and not is_admin:
-            await ctx.send('Nie masz uprawnień administratora.')
-            return
-        elif not admin:
-            result = connection.execute(
-                text(f'SELECT country_id FROM players WHERE player_id = {ctx.author.id};')).fetchone()
-            if result is not None:
-                country = result[0]
-            else:
-                await ctx.send('Nie masz przypisanego państwa.')
-                return
-
-        building, province = building.strip(), province.strip()
-        result = connection.execute(
-            text(f'SELECT building_id, building_name FROM buildings NATURAL JOIN country_buildings '
-                 f'WHERE building_name = "{building}" AND country_id in ({country},255);')).fetchone()
-
-        if result is None:
-            await ctx.send('Taki budynek nie istnieje!')
-            return
-        building = result[0]
-        b_name = result[1]
-
-        if province[0] == '#':
-            result = connection.execute(
-                text(f'SELECT province_id, province_name FROM provinces '
-                     f'WHERE country_id = {country} AND province_id = {province[1:]}')).fetchone()
-        else:
-            result = connection.execute(
-                text(f'SELECT province_id, province_name FROM provinces '
-                     f'WHERE country_id = {country} AND province_name = {province};')).fetchone()
-
-        if result is None:
-            await ctx.send('Taka prowincja nie istnieje lub nie jesteś jej właścicielem!')
-            return
-        province = result[0]
-        p_name = result[1]
-        result = connection.execute(
-            text(
-                f'SELECT province_id FROM structures WHERE province_id = {province} AND building_id = {building};')).fetchone()
-        if result is not None:
-            await ctx.send(f'{b_name} już istenieje w prowincji {p_name}(#{province})!')
-            return
-
-        connection.rollback()
-        connection.begin()
-
-        try:
-            connection.execute(text(f'INSERT INTO structures VALUES ({building}, {province})'))
-        except:
-            await ctx.send('Something went terribly wrong!')
-            connection.rollback()
-            connection.close()
-            return
-
-        connection.commit()
         connection.close()
         return
 
+    @building.subcommand(sub_cmd_description='Budowanie budynków')
+    @interactions.slash_option(name='building', description='Nazwa budynku który chcesz zbudować',
+                               opt_type=interactions.OptionType.STRING, required=True)
+    @interactions.slash_option(name='province', description='W jakiej prowincji chcesz zbudować budynek?',
+                               opt_type=interactions.OptionType.STRING, required=True)
+    @interactions.slash_option(name='admin', description='Jesteś admin?', required=False,
+                               opt_type=interactions.OptionType.BOOLEAN)
+    async def build(self, ctx: interactions.SlashContext, building: str, province: str, admin: bool = False):
+        connection = db.pax_engine.connect()
+        is_admin = admin and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR)
 
-"""
-    @building.subcommand(description='')
-    async def destroy(self):
-        return
 
-    @building.subcommand(description='')
-    async def upgrade(self):
+        country_id = connection.execute(
+            text(
+                f'SELECT country_id from players NATURAL JOIN countries WHERE player_id = {ctx.author.id};')).fetchone()[
+            0]
+        if country_id is None and not is_admin:
+            await ctx.send(embed=interactions.Embed(description=f'Nie posiadasz państwa!'))
+            return
+        if is_admin:
+            country_id = '%'
+
+        if province.startswith('#'):
+            query = connection.execute(text(
+                f'SELECT province_id, province_name FROM provinces WHERE province_id = "{province[1:]}"'
+            )).fetchone()
+            if query is None and not is_admin:
+                await ctx.send(embed=interactions.Embed(description=f'Nie istnieje prowincja o ID **{province}**!'))
+                return
+            province_id, province_name = query
+        else:
+            query = connection.execute(text(
+                f'SELECT province_id, province_name FROM provinces WHERE province_name = "{province}"'
+            )).fetchone()
+            if query is None and not is_admin:
+                await ctx.send(embed=interactions.Embed(description=f'Nie istnieje prowincja o nazwie **{province}**!'))
+                return
+            province_id, province_name = query
+
+        number_of_buildings, max_buildings, province_owner, province_controller = connection.execute(text(
+            f"""
+                SELECT 
+                  COUNT(*), 
+                  province_building_limit,
+                  country_id,
+                  controller_id
+                FROM 
+                  provinces NATURAL 
+                  JOIN structures NATURAL 
+                  JOIN province_levels 
+                WHERE 
+                  province_id = {province_id};
+                """
+        )).fetchone()
+        print(f'country_id = {country_id}')
+        print(f'owner = {province_owner}')
+        print(f'controller = {province_controller}')
+        if (province_owner != country_id) and (not is_admin):
+            await ctx.send(embed=interactions.Embed(description=f'Prowincja **{province_name} (#{province_id})**'
+                                                                f' nie jest w pełni kontrolowana przez twoje państwo!'))
+            return
+
+        costs = {}
+        building = building.strip().split(',')  # ['2 Tartak', '2 Kopalnia']
+        for i, b in enumerate(building):
+            b = str(b).strip()
+            print(b[0])
+            if not str.isdigit(b[0]):
+                print('added')
+                b = '1 ' + b
+            building[i] = b.split()  # [['2', 'Tartak'], ['2', 'Kopalnia']]
+            print(building[i] is not list)
+            print(len(building[i]))
+            print(type(building[i]))
+            if building[i] is str or len(building[i]) < 2:
+                building[i].insert(0, '1')
+            if len(building[i]) != 2:
+                await ctx.send(embed=interactions.Embed(description=f'Argument ma złą składnię! **{building[i]}**!'))
+                return
+
+            query = connection.execute(text(
+                f"""
+                SELECT 
+                  b.building_id, 
+                  b.building_name,
+                  b.building_emoji,
+                  b.building_id,
+                  bc.item_id,
+                  bc.item_quantity
+                FROM 
+                  country_buildings cb NATURAL
+                  JOIN buildings b NATURAL 
+                  JOIN buildings_cost bc 
+                WHERE 
+                  b.building_name = '{building[i][1]}' 
+                  AND (cb.country_id LIKE '{country_id}' OR cb.country_id = 255);
+                """
+            )).fetchall()
+
+            if query is None:
+                await ctx.send(
+                    embed=interactions.Embed(description=f'Nie masz szablonu bundyku o nazwie **{building[i][1]}**!'))
+                return
+
+            building[i].append(query[0][2])  # [['1', 'Tartak', ':tartak:], ['2', 'Kopalnia', ':kopalnia:]]
+            building[i].append(query[0][3])  # [['1', 'Tartak', ':tartak:, 1], ['2', 'Kopalnia', ':kopalnia:, 3]]
+
+            for cost in query:
+                if cost[4] not in costs:
+                    costs[cost[4]] = cost[5] * int(building[i][0])  # "2": 200
+                else:
+                    costs[cost[4]] += cost[5] * int(building[i][0])  # "2": 400
+            print(building[i][1])
+            print(query)
+
+        # ENTER ADMIN MODE
+        if is_admin:
+            spawned_buildings = ''
+            for b in building:
+                print(b)
+                print(b[0])
+                print(type(b[0]))
+                spawned_buildings = spawned_buildings + f', {b[0]} {b[2]} **{b[1]}**'
+                connection.execute(text(
+                    f"""
+                    INSERT INTO structures (
+                      province_id, building_id, quantity
+                    ) 
+                    VALUES 
+                      ({province_id}, {b[3]}, {int(b[0])}) ON DUPLICATE KEY 
+                    UPDATE 
+                      quantity = quantity + 1
+                    """
+                ))
+            connection.commit()
+            print(spawned_buildings)
+            await ctx.send(embeds=interactions.Embed(title=f'Zespawnowano budynki w prowincji **{province_name} (#{province_id})!**',
+                                                     description=f'{spawned_buildings[2:]}'))
+            return
+
+        print(costs)  # {2: 1500, 4: 40, 5: 60}
+
+        if (number_of_buildings + sum(
+                [int(i) for i in list(zip(*building))[0]])) > max_buildings:  # buildings + new_buildings > max
+            await ctx.send(embed=interactions.Embed(description=f'W prowincji **{province_name} (#{province_id})**'
+                                                                f' nie ma tyle miejsc na budynki!\n'
+                                                                f'`{number_of_buildings} +'
+                                                                f' {sum([int(i) for i in list(zip(*building))[0]])} > {max_buildings}`'))
+            return
+
+        keys = ''
+        for key in costs:
+            keys = keys + f', {key}'  # '2, 4, 5'
+
+        inventory = connection.execute(text(
+            f"SELECT it.item_id, inv.quantity, it.item_emoji, it.item_name "
+            f"FROM inventories inv NATURAL JOIN items it "
+            f"WHERE it.item_id IN ({keys[2:]}) AND inv.country_id = '{country_id}'"
+        )).fetchall()  # [[2, 1000.00], [4, 190.00], [4, 0.00]]
+
+        for item in inventory:
+            if item[1] < costs[item[0]]: # 1000.00 < 1500
+                resources_required = ''
+                for jtem in inventory:
+                    if jtem[1] > costs[jtem[0]]:
+                        resources_required = resources_required + f', {jtem[2]} **{jtem[3]} [{jtem[1]}/{costs[jtem[0]]}]**'
+                    else:
+                        resources_required = resources_required + f', {jtem[2]} {jtem[3]} [{jtem[1]}/{costs[jtem[0]]}]'
+                await ctx.send(
+                    embed=interactions.Embed(description=f'Nie masz wystarczająco zasobów żeby wybudować budynki!\n'
+                                                         f'{resources_required[2:]}'))
+                return
+
+        connection.close()
         return
-"""
+    

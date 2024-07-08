@@ -427,7 +427,7 @@ async def build_province_embed(province_id: int, country_id: int):
     image = interactions.EmbedAttachment(url=terrain_image_url)
     # Building the Embed
     embed = interactions.Embed(
-        color=color,
+        color=int(color, 16),
         title=f"{province_name} (#{province_id}), poziom {roman.toRoman(province_level)}",
         #url=query[11],
         #footer=embed_footer,
@@ -952,7 +952,7 @@ def ic_inventory_give():
                                                           f"\n\u001b[0;32m•Ilość & Item\u001b[0;0m"
                                                           f"\nRodzaj i ilość itemów które chcemy dać.```", inline=True)
     f3 = interactions.EmbedField(name="{admin}", value=f"```ansi"
-                                                       f"\n\u001b[0;35m•admin\u001b[0;0m"
+                                                       f"\n\u001b[0;35m•True\u001b[0;0m"
                                                        f"\nPozwala na spawnowanie itemów.```", inline=True)
     f4 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/inventory give [@XnraD] [10 Talary]\u001b[0;0m```"
@@ -1031,18 +1031,18 @@ def ic_army_recruit():
                                                            f"\nZ prowincji o ten nazwie będzie pochodzić jednostka.```",
                                  inline=True)
     f2 = interactions.EmbedField(name="[jednostka]", value=f"```ansi"
-                                                           f"\n\u001b[0;32m•Szablon jednostki\u001b[0;0m"
+                                                           f"\n\u001b[0;32m•Szablon jednostki zawodowej\u001b[0;0m"
                                                            f"\nTaka jednostka zostanie zrekrutowana.```", inline=True)
     f3 = interactions.EmbedField(name="(nazwa_jednostki)", value=f"```ansi"
-                                                                 f"\n\u001b[0;33m•Nazwa Jednostki\u001b[0;0m"
+                                                                 f"\n\u001b[0;33m•Nazwa jednostki\u001b[0;0m"
                                                                  f"\nNazwa nowo utworzonej jednostki.```", inline=True)
     f4 = interactions.EmbedField(name="(nazwa_armii)", value=f"```ansi"
-                                                             f"\n\u001b[0;34m•Nazwa Armii\u001b[0;0m"
+                                                             f"\n\u001b[0;34m•Nazwa armii\u001b[0;0m"
                                                              f"\nNazwa nowo utworzonej armii.```", inline=True)
     f5 = interactions.EmbedField(name="{admin}", value=f"```ansi"
                                                        f"\n\u001b[0;35m•@ gracza\u001b[0;0m"
                                                        f"\nSpawnuje jednostkę krajowi danego gracza."
-                                                       f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
+                                                       f"\n\u001b[0;35m•Nazwa kraju\u001b[0;0m"
                                                        f"\nSpawnuje jednostkę danemu krajowi.```", inline=True)
     f6 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/army recruit [#53] [Wojownicy]\u001b[0;0m```"
@@ -1057,7 +1057,7 @@ def ic_army_recruit():
                                  inline=False)
     embed = interactions.Embed(
         title="/army recruit [prowincja] [jednostka] (nazwa_jednostki) (nazwa_armii) {admin}",
-        description="Rekrutuje daną jednostkę w danej prowincji.\n"
+        description="Rekrutuje daną jednostkę wojska zawodowego w danej prowincji.\n"
                     "Pobiera potrzebną ilość populacji z rekrutowanej prowincji oraz surowce z ekwipunku.\n"
                     "Nazwy jednostek ani armii nie mogą się duplikować.",
         author=author,
@@ -1342,15 +1342,15 @@ def ic_building_build():
                                                          f"\n\u001b[0;32m•Szablon budynku\u001b[0;0m"
                                                          f"\nTaki budynek zostanie wybudowany.```", inline=False)
     f3 = interactions.EmbedField(name="{admin}", value=f"```ansi"
-                                                       f"\n\u001b[0;35m•@ gracza\u001b[0;0m"
-                                                       f"\nSpawnuje budynek krajowi danego gracza."
-                                                       f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
-                                                       f"\nSpawnuje budynek danemu krajowi.```", inline=True)
+                                                       f"\n\u001b[0;35m•True\u001b[0;0m"
+                                                       f"\nPozwala na spawnowanie budynków```", inline=True)
     f4 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/building building [#53] [Tartak]\u001b[0;0m```"
-                                       f"\nBuduje w prowincji #53 Tartak."
+                                       f"\nBuduje w prowincji #50 1 Tartak."
                                        f"\nW prowincji #53 zaczyna pracować dana ilość populacji."
-                                       f"\nOdejmuje potrzebną ilość pozostałych itemów z inventory.",
+                                       f"\nOdejmuje potrzebną ilość pozostałych itemów z inventory."
+                                       f"```ansi\n\u001b[0;40m/building building [Kanonia] [1 Tartak, 2 Kopalnia]\u001b[0;0m```"
+                                       f"\nBuduje w prowincji Kanonia 1 Tartak i 2 Kopalnie.",
                                  inline=False)
     embed = interactions.Embed(
         title="/building build [prowincja] [budynek] {admin}",
@@ -1482,6 +1482,7 @@ async def bt_list(self, country_id):
                 WHERE
                   country_id LIKE '{country_id}';
                 ''')).fetchall()
+        country_id = 1
     else:
         building_ids = connection.execute(
             text(f'''
@@ -1506,15 +1507,17 @@ async def bt_list(self, country_id):
               JOIN buildings b NATURAL 
               JOIN buildings_cost bc NATURAL 
               JOIN items it 
-              JOIN inventories inv ON it.item_id = inv.item_id 
+              LEFT JOIN inventories inv ON it.item_id = inv.item_id 
             WHERE 
-              bc.building_id = {building_id[0]};
+              bc.building_id = {building_id[0]}
+              AND (inv.country_id = {country_id})
             ''')).fetchall()
         building_emoji, building_name = building_costs[0][0], building_costs[0][1]
         building_line = f'{building_emoji} **{building_name}** - Cost: '
 
         for building_cost in building_costs:
             item_emoji, item_name, cost, inventory = building_cost[2], building_cost[3], building_cost[4], building_cost[5]
+            inventory = inventory if inventory is not None else 0
             if cost > inventory: # Not enough items
                 can_build = False
                 building_line = building_line + f'{item_emoji} {item_name} [{inventory}/{cost}], '

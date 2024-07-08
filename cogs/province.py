@@ -163,6 +163,9 @@ class Province(interactions.Extension):
                                opt_type=interactions.OptionType.STRING, required=True)
     async def rename(self, ctx: interactions.SlashContext, nazwa: str, nowa_nazwa: str):
         await ctx.defer()
+        nazwa.strip()
+        nowa_nazwa.strip()
+
         # Don't read this either.
         country_id = db.pax_engine.connect().execute(text(
             f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
@@ -208,7 +211,7 @@ class Province(interactions.Extension):
 
         with db.pax_engine.connect() as conn:
             conn.begin()
-            conn.execute(text(f'UPDATE provinces SET province_name = "{nowa_nazwa} "'
+            conn.execute(text(f'UPDATE provinces SET province_name = "{nowa_nazwa}"'
                               f'WHERE province_id = {province[0]}'))
             conn.commit()
             conn.close()

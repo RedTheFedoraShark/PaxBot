@@ -162,11 +162,11 @@ class Inventory(interactions.Extension):
         await ctx.send(choices)
 
     @inventory.subcommand(sub_cmd_name="give")
-    @interactions.slash_option(name='country', description='a',
+    @interactions.slash_option(name='country', description='Wpisz dokładną nazwę kraju lub zpinguj gracza.',
                                opt_type=interactions.OptionType.STRING)
-    @interactions.slash_option(name='items', description='b',
+    @interactions.slash_option(name='items', description='ilość nazwa_itemu1, ilość nazwa_itemu2',
                                opt_type=interactions.OptionType.STRING)
-    @interactions.slash_option(name='admin', description='c',
+    @interactions.slash_option(name='admin', description='Jesteś admin?',
                                opt_type=interactions.OptionType.BOOLEAN)
     async def give(self, ctx: interactions.SlashContext, country: str, items: str, admin: bool = False):
         await ctx.defer()

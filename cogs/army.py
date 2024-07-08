@@ -141,6 +141,7 @@ class Army(interactions.Extension):
         await ctx.defer()
 
         if admin != '' and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
+            is_admin = True
             if admin.startswith('<@') and admin.endswith('>'):  # if a ping
                 country_id = db.pax_engine.connect().execute(text(
                     f'SELECT country_id FROM players NATURAL JOIN countries '
@@ -150,32 +151,41 @@ class Army(interactions.Extension):
                     f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{admin}"'
                 )).fetchone()[0]
         else:
+            is_admin = False
             country_id = db.pax_engine.connect().execute(text(
                 f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
             )).fetchone()[0]
 
         if prowincja.startswith('#'):
             prov = db.pax_engine.connect().execute(text(
-                f'SELECT p.province_id, p.province_name '
-                f'FROM provinces p '
-                f'WHERE province_id = "{prowincja[1:]}" AND p.country_id = {country_id} '
-                f'AND p.controller_id = {country_id}'
+                f'SELECT province_id, province_name, country_id, controller_id '
+                f'FROM provinces '
+                f'WHERE province_id = "{prowincja[1:]}"'
             )).fetchone()
             if not prov:
-                await ctx.send(
-                    f"```ansi\n\u001b[0;31mNie kontrolujesz\u001b[0;0m w pełni prowincji o ID #{prowincja[1:]}.```")
+                await ctx.send(embed=interactions.Embed(description=f'Nie istnieje prowincja o ID **{prowincja}**!'))
                 return
+            province_id, province_name, province_owner, province_controller = prov
         else:
             prov = db.pax_engine.connect().execute(text(
-                f'SELECT p.province_id, p.province_name '
-                f'FROM provinces p '
-                f'WHERE province_id = "{prowincja}" AND p.country_id = {country_id} '
-                f'AND p.controller_id = {country_id}'
+                f'SELECT province_id, province_name, country_id, controller_id '
+                f'FROM provinces '
+                f'WHERE province_id = "{prowincja}"'
             )).fetchone()
             if not prov:
-                await ctx.send(
-                    f"```ansi\n\u001b[0;31mNie kontrolujesz\u001b[0;0m w pełni prowincji o nazwie {prowincja}.```")
+                await ctx.send(embed=interactions.Embed(description=f'Nie istnieje prowincja o nazwie **{prowincja}**!'))
                 return
+            province_id, province_name, province_owner, province_controller = prov
+
+        if (province_owner != country_id) and (not is_admin):
+            await ctx.send(embed=interactions.Embed(description=f'Prowincja **{province_name} (#{province_id})**'
+                                                                f' nie należy do twojego państwa!'))
+            return
+
+        if (province_controller != country_id) and (not is_admin):
+            await ctx.send(embed=interactions.Embed(description=f'Prowincja **{province_name} (#{province_id})**'
+                                                                f' nie jest kontrolowana przez twoje państwo!'))
+            return
 
         if jednostka.startswith('#'):
             unit = db.pax_engine.connect().execute(text(

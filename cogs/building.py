@@ -24,19 +24,41 @@ class Building(interactions.Extension):
         pass
 
     @building.subcommand(sub_cmd_description='Lista twoich zbudowanych budynków')
-    @interactions.slash_option(name='province', description='#Id lub nazwa prowincji', required=True,
-                               opt_type=interactions.OptionType.STRING)
-    @interactions.slash_option(name='country', description='Nazwa państwa lub ping',
+    @interactions.slash_option(name='province', description='#ID lub nazwa prowincji (NIE DZIAŁA)',
                                opt_type=interactions.OptionType.STRING)
     @interactions.slash_option(name='admin', description='Admin?',
-                               opt_type=interactions.OptionType.BOOLEAN)
-    async def list(self, ctx: interactions.SlashContext, province: str = '', country: str = '', admin: bool = False):
-        is_admin = admin and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR)
+                               opt_type=interactions.OptionType.STRING)
+    async def list(self, ctx: interactions.SlashContext, province: str = '', admin: str = ''):
+        await ctx.defer()
+        connection = db.pax_engine.connect()
 
+        if admin != '' and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
+            if admin == "admin":
+                country_id = '%'
+            elif admin.startswith('<@') and admin.endswith('>'):  # if a ping
+                country_id = connection.execute(text(
+                    f'SELECT country_id FROM players NATURAL JOIN countries '
+                    f'WHERE player_id = {admin[2:-1]}')).fetchone()[0]
+            else:
+                country_id = connection.execute(text(
+                    f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{admin}"'
+                )).fetchone()[0]
+        else:
+            country_id = connection.execute(text(
+                f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
+            )).fetchone()[0]
+
+        pages = await models.b_building_list(self, country_id=country_id)
+
+        if len(pages) == 1:
+            await ctx.send(embed=pages[0])
+        else:
+            paginator = Paginator.create_from_embeds(ctx.client, *pages)
+            await paginator.send(ctx=ctx)
         return
 
     @building.subcommand(sub_cmd_description='Lista twoich szablonów budynków')
-    @interactions.slash_option(name='tryb', description='W jakim trybie wyświetlić informacje?',
+    @interactions.slash_option(name='tryb', description='W jakim trybie wyświetlić informacje? (NIE DZIAŁA)',
                                opt_type=interactions.OptionType.STRING, required=True,
                                choices=[interactions.SlashCommandChoice(name="Dokładny", value="pages"),
                                         interactions.SlashCommandChoice(name="Prosty", value="list")])
@@ -61,7 +83,7 @@ class Building(interactions.Extension):
             country_id = connection.execute(text(
                 f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
             )).fetchone()[0]
-        pages = await models.bt_list(self, country_id=country_id)
+        pages = await models.b_building_templates(self, country_id=country_id)
 
         if len(pages) == 1:
             await ctx.send(embed=pages[0])
@@ -83,7 +105,6 @@ class Building(interactions.Extension):
         connection = db.pax_engine.connect()
         is_admin = admin and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR)
 
-
         country_id = connection.execute(
             text(
                 f'SELECT country_id from players NATURAL JOIN countries WHERE player_id = {ctx.author.id};')).fetchone()[
@@ -96,7 +117,7 @@ class Building(interactions.Extension):
 
         if province.startswith('#'):
             query = connection.execute(text(
-                f'SELECT province_id, province_name FROM provinces WHERE province_id = "{province[1:]}"'
+                f'SELECT province_id, province_name FROM provinces WHERE province_id = "{province[1:]}"' #4000
             )).fetchone()
             if query is None and not is_admin:
                 await ctx.send(embed=interactions.Embed(description=f'Nie istnieje prowincja o ID **{province}**!'))
@@ -104,7 +125,7 @@ class Building(interactions.Extension):
             province_id, province_name = query
         else:
             query = connection.execute(text(
-                f'SELECT province_id, province_name FROM provinces WHERE province_name = "{province}"'
+                f'SELECT province_id, province_name FROM provinces WHERE province_name = "{province}"'  # [50, 'Jarawa']
             )).fetchone()
             if query is None and not is_admin:
                 await ctx.send(embed=interactions.Embed(description=f'Nie istnieje prowincja o nazwie **{province}**!'))
@@ -203,7 +224,7 @@ class Building(interactions.Extension):
                     VALUES 
                       ({province_id}, {b[3]}, {int(b[0])}) ON DUPLICATE KEY 
                     UPDATE 
-                      quantity = quantity + 1
+                      quantity = quantity + {int(b[0])}
                     """
                 ))
             connection.commit()
@@ -211,8 +232,6 @@ class Building(interactions.Extension):
             await ctx.send(embeds=interactions.Embed(title=f'Zespawnowano budynki w prowincji **{province_name} (#{province_id})!**',
                                                      description=f'{spawned_buildings[2:]}'))
             return
-
-        print(costs)  # {2: 1500, 4: 40, 5: 60}
 
         if (number_of_buildings + sum(
                 [int(i) for i in list(zip(*building))[0]])) > max_buildings:  # buildings + new_buildings > max
@@ -223,7 +242,7 @@ class Building(interactions.Extension):
             return
 
         keys = ''
-        for key in costs:
+        for key in costs:  # {2: 1500, 4: 40, 5: 60}
             keys = keys + f', {key}'  # '2, 4, 5'
 
         inventory = connection.execute(text(
@@ -236,6 +255,10 @@ class Building(interactions.Extension):
             if item[1] < costs[item[0]]: # 1000.00 < 1500
                 resources_required = ''
                 for jtem in inventory:
+                    print(f'jtem[1] = {jtem[1]}')
+                    print(f'costs[jtem[0]] = {(costs[item[0]])}')
+                    print(f'jtem[1] = {type(jtem[1])}')
+                    print(f'costs[jtem[0]] = {type(costs[item[0]])}')
                     if jtem[1] > costs[jtem[0]]:
                         resources_required = resources_required + f', {jtem[2]} **{jtem[3]} [{jtem[1]}/{costs[jtem[0]]}]**'
                     else:
@@ -245,6 +268,43 @@ class Building(interactions.Extension):
                                                          f'{resources_required[2:]}'))
                 return
 
+        for item in inventory:
+            costs[item[0]] = [costs[item[0]], item[2], item[3]]  # {2: [1500, ':Talary:', 'Talary'], 4: [40,
+            # ':Drewno:', 'Drewno'], 5: [60, ':Kamien:', 'Kamien']}
+
+        # Everything checked, take resources and give buildings
+        overall_cost = ''
+        for key in costs:  # {2: [1500, ':Talary:', 'Talary'], 4: [40, ':Drewno:', 'Drewno']
+            connection.execute(text(
+                f"""
+                UPDATE 
+                  inventories
+                SET 
+                  quantity = quantity - {costs[key][0]} 
+                WHERE country_id = {country_id} 
+                AND item_id = {key};
+                """
+            ))
+            overall_cost = overall_cost + f', **{costs[key][0]}** {costs[key][1]} {costs[key][2]}'
+        built_buildings = ''
+        for build in building:  # [['1', 'Tartak', ':tartak:, 1], ['2', 'Kopalnia', ':kopalnia:, 3]]
+            connection.execute(text(
+                f"""
+                INSERT INTO structures (
+                  province_id, building_id, quantity
+                ) 
+                VALUES 
+                  ({province_id}, {build[3]}, {int(build[0])}) ON DUPLICATE KEY 
+                UPDATE 
+                  quantity = quantity + {int(build[0])}
+                """
+            ))
+            built_buildings = built_buildings + f', **{build[0]}** {build[2]} {build[1]}'
+
+        connection.commit()
         connection.close()
+        await ctx.send(
+            embeds=interactions.Embed(title=f'Wybudowano budynki w prowincji **{province_name} (#{province_id})!**',
+                                      description=f'{built_buildings[2:]}\n'
+                                                  f'Koszt: {overall_cost[2:]}'))
         return
-    

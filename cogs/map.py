@@ -108,18 +108,28 @@ class Map(interactions.Extension):
                     author_id = db.pax_engine.connect().execute(text(
                         f"SELECT country_id FROM players WHERE player_id = {ctx.author.id}")).fetchone()
                     result = db.pax_engine.connect().execute(text(
-                        f"SELECT pixel_capital_x, pixel_capital_y, good_color, country_id "
-                        f"FROM goods NATURAL JOIN provinces")).fetchall()
-
+                        f"SELECT pixel_capital_x, pixel_capital_y, item_color, country_id, good_id "
+                        f"FROM provinces LEFT "
+                        f"JOIN items ON good_id = item_id")).fetchall()
                     admin_bool = False
                     if admin and is_admin:
                         admin_bool = True
                     with Drawing() as draw:
                         for row in result:
-                            if row[3] == author_id[0] or admin_bool:
-                                draw.fill_color = Color(f'#{row[2]}')
-                                draw.color(row[0], row[1], 'replace')
-                            else:
+                            if row[3] == author_id[0] or admin_bool:  # If owned/seen
+                                if row[4] == 255:  # If land with no goods
+                                    draw.fill_color = Color(f'#969696')
+                                    draw.color(row[0], row[1], 'replace')
+                                elif row[4] == 254:  # If sea
+                                    draw.fill_color = Color(f'#446BA3')
+                                    draw.color(row[0], row[1], 'replace')
+                                elif row[4] == 253:  # If mountians
+                                    draw.fill_color = Color(f'#000000')
+                                    draw.color(row[0], row[1], 'replace')
+                                else:  # If not any of the above, draw the trade good
+                                    draw.fill_color = Color(f'#{row[2]}')
+                                    draw.color(row[0], row[1], 'replace')
+                            else:  # If not owned
                                 draw.fill_color = Color(f'#00000080')
                                 draw.color(row[0], row[1], 'replace')
                         draw(fi_2)

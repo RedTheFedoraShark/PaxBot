@@ -366,7 +366,8 @@ async def build_province_embed(province_id: int, country_id: int):
         f'rl.religion_name, g.good_name, c.country_id, c.country_name, c.country_color, cc.country_id, cc.country_name, '
         f'p.province_level, pl.province_pops_limit, pl.province_pops_income '
         f'FROM provinces p NATURAL JOIN religions rl '
-        f'NATURAL JOIN terrains t NATURAL JOIN goods g '
+        f'NATURAL JOIN terrains t '
+        f'JOIN item i ON p.good_id = i.item_id '
         f'NATURAL JOIN regions rg '
         f"INNER JOIN countries c ON p.country_id = c.country_id "
         f"INNER JOIN countries cc ON p.controller_id = cc.country_id "
@@ -748,9 +749,7 @@ def commands():
                                        f"\n\u001b[0;34m/building build\u001b[0;0m"
                                        f"\nBudowanie budynków."
                                        f"\n\u001b[0;34m/building destroy\u001b[0;0m"
-                                       f"\nNiszczenie budynków."
-                                       f"\n\u001b[0;34m/building upgrade\u001b[0;0m"
-                                       f"\nUlepszanie budynków.```", inline=True)
+                                       f"\nNiszczenie budynków.```", inline=True)
     f5 = interactions.EmbedField(name="Provinces",
                                  value=f"```ansi"
                                        f"\n\u001b[0;36m/province list\u001b[0;0m"
@@ -1345,11 +1344,11 @@ def ic_building_build():
                                                        f"\n\u001b[0;35m•True\u001b[0;0m"
                                                        f"\nPozwala na spawnowanie budynków```", inline=True)
     f4 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/building building [#53] [Tartak]\u001b[0;0m```"
+                                 value=f"```ansi\n\u001b[0;40m/building build [#53] [Tartak]\u001b[0;0m```"
                                        f"\nBuduje w prowincji #50 1 Tartak."
                                        f"\nW prowincji #53 zaczyna pracować dana ilość populacji."
                                        f"\nOdejmuje potrzebną ilość pozostałych itemów z inventory."
-                                       f"```ansi\n\u001b[0;40m/building building [Kanonia] [1 Tartak, 2 Kopalnia]\u001b[0;0m```"
+                                       f"```ansi\n\u001b[0;40m/building build [Kanonia] [1 Tartak, 2 Kopalnia]\u001b[0;0m```"
                                        f"\nBuduje w prowincji Kanonia 1 Tartak i 2 Kopalnie.",
                                  inline=False)
     embed = interactions.Embed(
@@ -1368,36 +1367,8 @@ def ic_building_destroy():
                                                          f"\nNiszczy budynek o danym ID.```",
                                  inline=True)
     f2 = interactions.EmbedField(name="{admin}", value=f"```ansi"
-                                                       f"\n\u001b[0;35m•@ gracza\u001b[0;0m"
-                                                       f"\nUsuwa budynek krajowi danego gracza."
-                                                       f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
-                                                       f"\nUsuwa budynek danemu krajowi.```", inline=True)
-    f3 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/building destroy [#27]\u001b[0;0m```"
-                                       f"\nNiszczy budynek #27."
-                                       f"\nZwraca część kosztów oraz zwalnia robotników."
-                                       f"```ansi\n\u001b[0;40m/army disband [#27, #37]\u001b[0;0m```"
-                                       f"\nTo samo co wyżej, ale kilka budynków na raz.",
-                                 inline=False)
-    embed = interactions.Embed(
-        title="/building destroy [budynek] {admin}",
-        description="Niszczy dany budynek zwracając część surowców do inventory oraz zwalniając robotników.\n"
-                    "Możesz zniszczyć tylko budynki które posiadasz oraz kontrolujesz.",
-        author=author,
-        fields=[f1, f2, f3]
-    )
-    return embed
-
-
-def ic_building_upgrade():
-    f1 = interactions.EmbedField(name="[budynek]", value=f"```ansi"
-                                                         f"\n\u001b[0;31m•# budynku\u001b[0;0m"
-                                                         f"\nUlepsza budynek o danym ID.```", inline=True)
-    f2 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
-                                                       f"\n\u001b[0;35m•@ gracza\u001b[0;0m"
-                                                       f"\nUlepsza budynek krajowi danego gracza."
-                                                       f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
-                                                       f"\nUlepsza budynek danemu krajowi.```", inline=True)
+                                                       f"\n\u001b[0;35m•True\u001b[0;0m"
+                                                       f"\nPozwala na usuwanie budynków```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/building destroy [#27]\u001b[0;0m```"
                                        f"\nNiszczy budynek #27."
@@ -1406,9 +1377,9 @@ def ic_building_upgrade():
                                        f"\nTo samo co wyżej, ale kilka budynków na raz.",
                                  inline=False)
     embed = interactions.Embed(
-        title="/building upgrade [budynek] {admin}",
-        description="Ulepsza dany budynek o jeden poziom.\n"
-                    "Nie da się downgrade'ować, jeśli nie chcesz budynku ulepszonego musisz go zniszczyć.",
+        title="/building destroy [budynek] {admin}",
+        description="Niszczy dany budynek zwracając część surowców do inventory oraz zwalniając robotników.\n"
+                    "Możesz zniszczyć tylko budynki które posiadasz oraz kontrolujesz.",
         author=author,
         fields=[f1, f2, f3]
     )
@@ -1468,7 +1439,7 @@ def ic_province_rename():
     return embed
 
 
-async def bt_list(self, country_id):
+async def b_building_templates(self, country_id):
     connection = db.pax_engine.connect()
 
     building_message = ''
@@ -1513,12 +1484,13 @@ async def bt_list(self, country_id):
               AND (inv.country_id = {country_id})
             ''')).fetchall()
         building_emoji, building_name = building_costs[0][0], building_costs[0][1]
-        building_line = f'{building_emoji} **{building_name}** - Cost: '
+        building_line = f'{building_emoji} **{building_name}** - Koszt: '
 
         for building_cost in building_costs:
-            item_emoji, item_name, cost, inventory = building_cost[2], building_cost[3], building_cost[4], building_cost[5]
+            item_emoji, item_name, cost, inventory = building_cost[2], building_cost[3], building_cost[4], \
+            building_cost[5]
             inventory = inventory if inventory is not None else 0
-            if cost > inventory: # Not enough items
+            if cost > inventory:  # Not enough items
                 can_build = False
                 building_line = building_line + f'{item_emoji} {item_name} [{inventory}/{cost}], '
             else:
@@ -1546,12 +1518,14 @@ async def bt_list(self, country_id):
                 ''')).fetchone()[0]
 
     author = await country_author(self, country_id=country_id)
-    footer = interactions.EmbedFooter("test")
+    footer = interactions.EmbedFooter(text=
+                                      f"/building build [#53] [Tartak] | "
+                                      f"/building build [Kanonia] [1 Tartak, 2 Kopalnia]")
 
     embeds = []
     for page in pages:
         embeds.append(interactions.Embed(
-            title="Budynki",
+            title="Twoje szablony budynków",
             description=page,
             author=author,
             footer=footer,
@@ -1560,25 +1534,65 @@ async def bt_list(self, country_id):
     return embeds
 
 
-async def bt_detail(building, connection):
-    f1 = interactions.EmbedField(
-        name='test',
-        value=building[2]
-    )
-    income = connection.execute(text(f'SELECT item_name, item_quantity FROM buildings_production NATURAL JOIN items '
-                                     f'WHERE building_id = {building[0]};')).fetchall()
-    print(income)
-    income = pd.DataFrame(income, columns=['Przedmiot', 'Przychód'])
+async def b_building_list(self, country_id):
+    connection = db.pax_engine.connect()
 
-    print(income.to_markdown(index=False))
-    f2 = interactions.EmbedField(
-        name='Przychód',
-        value=f'```ansi\n{income.to_markdown(index=False)}```'
-    )
-    embed = interactions.Embed(
-        title=f'{building[1]}',
-        description=building[2],
-        thumbnail=interactions.EmbedAttachment(url=building[4]),
-        fields=[f1, f2]
-    )
-    return embed
+    country_color = connection.execute(
+        text(f'''
+                    SELECT 
+                      country_color
+                    FROM 
+                      countries 
+                    WHERE
+                      country_id = {country_id};
+                    ''')).fetchone()[0]
+
+    author = await country_author(self, country_id=country_id)
+    footer = interactions.EmbedFooter(text=
+                                      f"/building destroy [#27, #37] | "
+                                      f"/building build [Kanonia] [1 Tartak, 2 Kopalnia]")
+    pages = [
+f"""
+TO JEST ATRAPA
+
+`Podstawowe Budynki`
+<:Tartak:1259978101442740327> **Tartak x13**  *[13/13 popów]* 100%
+<:small_triangle_up:1260292468704809071> <:Drewno:1259246014292820058> `39` Drewno
+
+<:Farma:1259978050536345723> **Farma x20**  *[17/20 popów]* 85% :exclamation:
+<:small_triangle_up:1260292468704809071> <:Zywnosc:1259245985272561815> `68` Żywność
+
+<:Weglarka:1259978130626449508> **Węglarka x7**  *[7/7 popów]* 100%
+<:small_triangle_up:1260292468704809071> <:Wegiel:1259254512447651930> `14` Węgiel
+<:small_triangle_down:1260292467044122636> <:Drewno:1259246014292820058> `21` Drewno
+
+<:Huta:1259978064352510057> **Huta x3**  *[3/3 popów]* 100%
+<:small_triangle_up:1260292468704809071> <:Zelazo:1259254532949676134> `3` Żelazo
+<:small_triangle_down:1260292467044122636> <:Wegiel:1259254512447651930> `3` Węgiel
+<:small_triangle_down:1260292467044122636> <:Kamien:1259246006990536764> `2` Kamień
+
+`Manufaktury`
+<:Miod:1260205434413908010><:Manufaktura:1259978081192644691> **Manufaktura (Miód)** *[1/1 popów]* 100%
+<:small_triangle_up:1260292468704809071> <:Talary:1259245998698659850> `100` Talary
+
+<:Porcelana:1260205446975717446><:Manufaktura:1259978081192644691> **Manufaktura (Porcelana)** *[0,7/1 popów]* 70% :exclamation:
+<:small_triangle_up:1260292468704809071> <:Talary:1259245998698659850> `100` Talary
+
+`Budynki Specjalne`
+<:Zywe_szklo:1260300476662939768><:Manufaktura:1259978081192644691> **Uprawy Żywego Szkła** *[1/1 popów]* 100%
+<:small_triangle_up:1260292468704809071> <:Zywe_szklo:1260300476662939768> `2` Żywe Szkło
+<:small_triangle_down:1260292467044122636> <:Zywnosc:1259245985272561815> `10` Żywność
+
+"""
+            ]
+
+    embeds = []
+    for page in pages:
+        embeds.append(interactions.Embed(
+            title="Lista budynków",
+            description=page,
+            author=author,
+            footer=footer,
+            color=int(country_color, 16)
+        ))
+    return embeds

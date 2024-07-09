@@ -257,8 +257,10 @@ class Inventory(interactions.Extension):
                     f'UPDATE inventories SET quantity = quantity - {item[0]} '
                     f'WHERE item_id = {item[2]} and country_id = {author_country[0]};')
             elif admin:
-                if items[0][:1] in '+-=':
-                    mode = items[0][:1]
+                print(items)
+                print(items[0][0])
+                if items[0][0] in '+-=':
+                    mode = items[0][0]
                 else:
                     mode = '+'
 

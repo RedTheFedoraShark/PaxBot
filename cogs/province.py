@@ -13,7 +13,7 @@ with open("./config/config.json") as f:
 
 def province_income(income: list, province_id: int):
     connection = db.pax_engine.connect()
-    # 1.1 Grabbing modifiers for the province (pops, autonomy and terrains)
+    # 1.1 Grabbing modifiers for the province (pops, terrains and others)
     query = connection.execute(
         text(f"SELECT SUM(building_workers * quantity), province_pops, terrain_id, country_id "
              f"FROM provinces NATURAL JOIN structures NATURAL JOIN buildings "
@@ -98,7 +98,7 @@ class Province(interactions.Extension):
 
         if tryb == "pages":
             if admin_bool:
-                print(f"CountryId {country_id}")
+                # print(f"CountryId {country_id}")
                 if country_id:
                     province_ids = db.pax_engine.connect().execute(text(
                         f'SELECT province_id FROM provinces NATURAL JOIN countries '
@@ -113,24 +113,20 @@ class Province(interactions.Extension):
                     f'SELECT province_id FROM provinces NATURAL JOIN countries '
                     f'WHERE country_id = {country_id[0]} OR controller_id = {country_id[0]}')).fetchall()
             non_dup_ids = set()
-            for x in province_ids:
-                non_dup_ids.add(x[0])
+            for province_id in province_ids:
+                non_dup_ids.add(province_id[0])
             non_dup_ids = sorted(non_dup_ids)
             pages = []
             if not country_id:
                 country_id = [0]
-            for x in non_dup_ids:
-                page = await models.build_province_embed(x, country_id[0])
+            for province_id in non_dup_ids:
+                page = await models.build_province_embed(self, province_id, country_id[0])
                 # if returned value is a list, unpack it
                 if isinstance(page, list):
                     for p in page:
                         pages.append(p)
                 else:
                     pages.append(page)
-            if len(pages) > 25:
-                use = True
-            else:
-                use = False
 
             paginator = Paginator.create_from_embeds(ctx.client, *pages)
             paginator.page_index = index
@@ -146,14 +142,16 @@ class Province(interactions.Extension):
                     f'SELECT country_id FROM players NATURAL JOIN countries '
                     f'WHERE player_id = {ctx.author.id}')).fetchone()
                 df = await models.build_province_list(country_id[0])
+            # print(df.to_markdown(index=False))
+            # print(len(df.to_markdown(index=False)))
             if len(df.to_markdown(index=False)) < 1990:
                 await ctx.send(f"```ansi\n{df.to_markdown(index=False)}```")
             else:
                 df = df.to_markdown(index=False).split("\n")
-                pages = await models.pagify(df)
+                pages = await models.pagify(df, max_char=1860)
 
-                paginator = Paginator.create_from_embeds(ctx.client, *pages)
-                paginator.page_index = index
+                paginator = Paginator.create_from_string(ctx.client, df, page_size=4000)
+                # paginator.page_index = index
                 await paginator.send(ctx=ctx)
 
     @province.subcommand(sub_cmd_description="Zmiana nazwy twojej prowincji.")
@@ -219,48 +217,3 @@ class Province(interactions.Extension):
         await ctx.send(f"```ansi\nPomyślnie zmieniono nazwę prowincji #{province[0]}.\n"
                        f"\u001b[1;31m'{province[1]}'\u001b[0;0m ➤ \u001b[1;32m'{nowa_nazwa}'\u001b[0;0m```")
 
-    """
-    @interactions.extension_command(description='dummy')
-    async def province(self, ctx: interactions.SlashContext):
-        return
-
-    @province.subcommand(description='')
-    @interactions.slash_option(name='country', description='Podaj nazwę państwa lub oznacz gracza')
-    async def list(self, ctx: interactions.SlashContext(), country: str):
-
-        await ctx.defer()
-        connection = db.pax_engine.connect()
-        if country.startswith('<@') and country.endswith('>'): # if a ping
-            result = connection.execute(
-                text(f'SELECT country_name, country_id FROM players NATURAL JOIN countries WHERE player_id = {country[2:-1]}')).fetchone()
-            if result is None:
-                await ctx.send('Ten gracz nie ma przypisanego państwa.')
-                connection.close()
-                return
-            country = result[1]
-        elif country != '':
-            result = connection.execute(
-                text(f'SELECT country_name, country_id FROM countries WHERE country_name = "{country}"')).fetchone()
-            if result is None:
-                await ctx.send('Takie państwo nie istnieje.')
-                connection.close()
-                return
-            country = result[1]
-        else:
-            country = connection.execute(
-                text(f'SELECT country_name, country_id from players NATURAL JOIN countries WHERE player_id = {ctx.author.id};')).fetchone()[1]
-
-        result = connection.execute(
-            text(f'SELECT province_id, province_name, region_name, terrain_name, good_name, '
-                 f'religion_name, country_name, province_pops, province_pops_used, province_autonomy '
-                 f'FROM provinces '
-                 f'NATURAL JOIN terrains '
-                 f'NATURAL JOIN goods '
-                 f'NATURAL JOIN regions '
-                 f'NATURAL JOIN religions'
-                 f'NATURAL JOIN countries'
-                 f'WHERE country_id = 1'))
-
-        connection.close()
-        return
-    """

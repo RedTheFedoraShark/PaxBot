@@ -55,6 +55,8 @@ class Building(interactions.Extension):
         else:
             paginator = Paginator.create_from_embeds(ctx.client, *pages)
             await paginator.send(ctx=ctx)
+
+        connection.close()
         return
 
     @building.subcommand(sub_cmd_description='Lista twoich szablonów budynków')
@@ -132,20 +134,19 @@ class Building(interactions.Extension):
                 return
             province_id, province_name = query
 
-        number_of_buildings, max_buildings, province_owner, province_controller = connection.execute(text(
+        number_of_buildings = connection.execute(text(
             f"""
-                SELECT 
-                  COUNT(*), 
-                  province_building_limit,
-                  country_id,
-                  controller_id
-                FROM 
-                  provinces NATURAL 
-                  JOIN structures NATURAL 
-                  JOIN province_levels 
-                WHERE 
-                  province_id = {province_id};
+                SELECT COUNT(*)
+                FROM provinces NATURAL JOIN structures
+                WHERE province_id = {province_id};
                 """
+        )).fetchone()[0]
+        province_owner, province_controller, max_buildings = connection.execute(text(
+            f"""
+                SELECT country_id, controller_id, province_building_limit 
+                FROM provinces NATURAL JOIN province_levels 
+                WHERE province_id = {province_id}
+            """
         )).fetchone()
         print(f'country_id = {country_id}')
         print(f'owner = {province_owner}')
@@ -157,6 +158,10 @@ class Building(interactions.Extension):
 
         costs = {}
         building = building.strip().split(',')  # ['2 Tartak', '2 Kopalnia']
+
+        for b in building:
+            print(b)
+
         for i, b in enumerate(building):
             b = str(b).strip()
             print(b[0])

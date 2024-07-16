@@ -85,7 +85,7 @@ class Army(interactions.Extension):
 
             for x in unit_ids:
                 #######################################################################################################
-                page = await models.build_province_embed(x, country_id[0])
+                page = await models.build_province_embed(self, x, country_id[0])
                 # if returned value is a list, unpack it
                 if isinstance(page, list):
                     for p in page:

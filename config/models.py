@@ -11,6 +11,13 @@ with open("./config/config.json") as f:
     configure = json.load(f)
 
 
+class Income:
+    def __init__(self, pops: float, buildings_incomes: dict, pops_hunger: float = 1):
+        self.pops = pops
+        self.pops_hunger = pops_hunger
+        self.buildings_incomes = buildings_incomes
+
+
 # Create an author element with country info for an embed
 async def country_author(self, country_id: int):
     connection = db.pax_engine.connect()
@@ -27,7 +34,8 @@ async def country_author(self, country_id: int):
                 WHERE 
                   c.country_id = {country_id};
               """)).all()
-
+    if not query:
+        return
     owners = ''
     for row in query:
         member = await self.bot.fetch_member(user_id=row[2], guild_id=configure['GUILD'])
@@ -40,16 +48,221 @@ async def country_author(self, country_id: int):
 
 
 # Pagify a table string
-async def pagify(dataframe: list, max: int):
+def pagify(dataframe: list, max_char: int):
+    # print(dataframe)
     bit = ''
     bits = []
+    # print(len(dataframe))
     for i, line in enumerate(dataframe):
-        if len(bit) > max or i == len(dataframe) - 1:
+        if len(bit) + len(line) > max_char:
             bits.append(bit)
             bit = ''
         bit = f"{bit}\n{line}"
+        # print(i)
+        # print(bit)
+        if i == len(dataframe) - 1:
+            bits.append(bit)
 
     return bits
+
+
+def get_province_modifiers(province_id):
+    connection = db.pax_engine.connect()
+    # 1. Grabbing modifiers for the province (pops, terrains)
+    # 1.1 Workforce
+    q = connection.execute(
+        text(f"SELECT SUM(b.building_workers * s.quantity), p.province_pops "
+             f"FROM provinces p NATURAL JOIN structures s NATURAL JOIN buildings b "
+             f"WHERE province_id = {province_id}")).fetchone()
+    if q is None or q[0] is None:  # No buildings with income
+        return
+    total_workers, pops = q
+    if total_workers == 0:  # Don't divide by zero
+        total_workers = 1
+    workforce_modifier = pops / int(total_workers)  # (0 ; 1)
+    workforce_modifier = workforce_modifier
+    if workforce_modifier > 1:
+        workforce_modifier = 1
+
+    # 1.2 Terrain
+    q = connection.execute(
+        text(f"SELECT tm.building_id, tm.throughput_modifier, tm.input_modifier, tm.output_modifier "
+             f"FROM provinces p NATURAL JOIN terrains t NATURAL JOIN terrains_modifiers tm "
+             f"WHERE province_id = {province_id}")).fetchall()
+    if q is None:  # No buildings with income
+        return
+    terrain_modifiers = {}
+    for tm in q:
+        building_id, throughput_modifier, input_modifier, output_modifier = tm
+        terrain_modifiers[building_id] = throughput_modifier, input_modifier, output_modifier  # 2: 10, -10, 20
+
+    return total_workers, pops, workforce_modifier, terrain_modifiers
+
+
+# Calculate the income of a province by each building type
+# Output: [taxes, [building_id: [building_id, quantity, building_name, building_emoji, workforce_modifier,
+# building_workers [item_id: [item_name, item_emoji, quantity], [item_id: [item_name, item_emoji, quantity], ...]]]]
+def province_buildings_income(province_id: int):
+    connection = db.pax_engine.connect()
+
+    q = get_province_modifiers(province_id)
+    # print(f"q = {q}")
+    if q is None:  # No buildings with income
+        return
+    total_workers, pops, workforce_modifier, terrain_modifiers = q
+
+    # 2. Get buildings
+    buildings = connection.execute(
+        text(f"SELECT b.building_id, s.quantity, b.building_name, b.building_emoji, b.building_workers "
+             f"FROM provinces p NATURAL JOIN buildings b NATURAL JOIN structures s "
+             f"WHERE province_id = {province_id}")).fetchall()
+    if buildings is None:  # No buildings with income
+        return Income(pops, dict())
+
+    # 3. Get production and apply modifiers
+    resources = {}
+    for building in buildings:
+        building_id, quantity, building_name, building_emoji, building_workers = building
+        q = connection.execute(
+            text(f"SELECT item_id, item_quantity, item_name, item_emoji FROM buildings_production NATURAL JOIN items "
+                 f"WHERE building_id = {building_id}")).fetchall()
+        if q is None: continue
+
+        building_income = {}
+        for income in q:
+            item_id, item_quantity, item_name, item_emoji = income
+            if item_quantity > 0:  # If income
+                item_quantity = (item_quantity * workforce_modifier * 1 + terrain_modifiers[building_id][0] *
+                                 1 + terrain_modifiers[building_id][2])
+            if item_quantity < 0:  # If cost
+                item_quantity = (item_quantity * workforce_modifier * 1 + terrain_modifiers[building_id][0] *
+                                 1 + terrain_modifiers[building_id][1])
+
+            building_income[item_id] = [item_quantity, item_name, item_emoji]
+
+        resources[building_id] = [quantity, building_name, building_emoji, workforce_modifier,
+                                  building_workers, building_income]
+
+    income = Income(round(pops, 1), resources)
+
+    # 250.0, {1: [3, 'Tartak', '<:Tartak:1259978101442740327> ', 0.45454545454545453, 1, {4: [1.3636363636363635, 'Drewno', '<:Drewno:1259246014292820058>']}]
+    return income
+
+
+# Get a list of province incomes and return a single dict of buildings with summed incomes
+def sum_buildings_incomes(incomes: list):
+    total_pops = 0
+
+    for i, inc in enumerate(incomes):
+        total_pops += inc.pops
+        incomes[i] = inc.buildings_incomes
+
+    building_keys = set()
+    for income in incomes:
+        for i_key in income:
+            building_keys.add(i_key)
+
+    buildings = dict()
+    for key in building_keys:
+        buildings[key] = [0, "name", "emoji", 0, 0, dict()]
+
+    for income in incomes:
+
+        for i_key in income:
+            # print('\n')
+
+            quantity, name, emoji, pops, workers, resource = income[i_key]
+            # print(f'{quantity}  {workers}  {pops}')
+            # print(income)
+            buildings[i_key][3] = ((buildings[i_key][0] * buildings[i_key][3]) + (quantity * pops)) / (
+                    buildings[i_key][0] + quantity)
+            buildings[i_key][0] = buildings[i_key][0] + quantity
+            buildings[i_key][1] = name
+            buildings[i_key][2] = emoji
+            buildings[i_key][4] = workers
+            for r_key in resource:  # 39: [0.84, 'Cegły', '<:Cegly:1259246021746229248>']
+                if r_key in buildings[i_key][5]:
+                    # print(
+                    #     f"{buildings[i_key][5][r_key][0]} = {buildings[i_key][5][r_key][0]} + {quantity} * {resource[r_key]}")
+                    buildings[i_key][5][r_key][0] = buildings[i_key][5][r_key][0] + quantity * resource[r_key][0]
+                else:
+                    buildings[i_key][5][r_key] = resource[r_key]
+                    buildings[i_key][5][r_key][0] = buildings[i_key][5][r_key][0] * quantity
+            # print(buildings)
+
+    incomes = Income(total_pops, buildings)
+    return incomes
+
+
+def buildings_income_description(buildings: dict):
+    def makeline(desc: str, build_id: int):
+        quantity, name, emoji, workers, pops, incomes = buildings[build_id]
+        if pops == 0:  # If the building doesn't use pops, don't add information about it to the line
+            desc += f'\u2028{emoji} **{name} x{quantity}\n**'
+        else:
+            if workers == 1:  # Add an exclamation mark where there is not enough pop to work
+                desc += (f'\u2028{emoji} **{name} x{quantity}** *[{round(workers * pops * quantity, 1)}'
+                         f'/{round(pops * quantity, 1)}]* {round(workers * 100, 1)}%\n')
+            else:
+                desc += (f'\u2028{emoji} **{name} x{quantity}** *[{round(workers * pops * quantity, 1)}'
+                         f'/{round(pops * quantity, 1)}]* {round(workers * 100, 1)} % :exclamation:\n')
+
+        for i_key in incomes:
+            item_quantity, name, emoji = incomes[i_key]
+            if item_quantity > 0:  # Assign an emoji indicator to income/cost
+                desc += f'<:small_triangle_up:1260292468704809071> {emoji} `{round(item_quantity, 1)}` {name}\n'
+            else:
+                desc += f'<:small_triangle_down:1260292467044122636> {emoji} `{round(item_quantity, 1)}` {name}\n'
+        # desc += '\n'
+
+        return desc
+
+    connection = db.pax_engine.connect()
+
+    production_building_ids = []
+    military_building_ids = []
+    special_building_ids = []
+    for building_id in buildings:
+        q = connection.execute(text(
+            f"""SELECT 
+                    country_id, building_workers
+                FROM 
+                    country_buildings NATURAL JOIN buildings 
+                WHERE
+                    building_id = {building_id}
+                  """)).fetchone()
+        if q is None: continue
+
+        country_id, building_workers = q
+        if country_id != 255:  # If building is special (Not default for every country. country_id == 255)
+            special_building_ids.append(building_id)
+        else:
+            if building_workers == 0:  # If building has no workers
+                military_building_ids.append(building_id)
+            else:
+                production_building_ids.append(building_id)
+    # print(production_building_ids)
+    # print(military_building_ids)
+    # print(special_building_ids)
+
+    description = ''
+    if production_building_ids:
+        description += '\u2028`Budynki Produkcyjne`\n'
+        for building_id in production_building_ids:
+            description = makeline(description, building_id)
+
+    if military_building_ids:
+        description += '\u2028\n`Budynki Wojskowe`\n'
+        for building_id in military_building_ids:
+            description = makeline(description, building_id)
+
+    if special_building_ids:
+        description += '\u2028\n`Budynki Specjalne`\n'
+        for building_id in special_building_ids:
+            description = makeline(description, building_id)
+
+    connection.close()
+    return description
 
 
 # Build an army info table as tabulated strings and return them as a list of strings
@@ -91,7 +304,6 @@ Pchdz: $""")
             new_field[indexes[n]: indexes[n] + len(word_list[n])] = list(word_list[n])
 
         table_list.append(''.join(new_field))
-    print(table_list)
     return table_list
 
 
@@ -249,7 +461,7 @@ async def build_province_list(country_id: int):
   ), 
   r.region_name, 
   t.terrain_name, 
-  g.good_name, 
+  it.item_name, 
   re.religion_name, 
   CONCAT(
     p.province_pops, 
@@ -265,8 +477,8 @@ async def build_province_list(country_id: int):
   cc.country_id 
 FROM 
   provinces p NATURAL 
-  JOIN regions r NATURAL 
-  JOIN goods g NATURAL 
+  JOIN regions r LEFT 
+  JOIN items it ON p.good_id = it.item_id NATURAL 
   JOIN terrains t NATURAL 
   JOIN religions re 
   INNER JOIN countries c ON p.country_id = c.country_id 
@@ -310,7 +522,7 @@ async def build_province_list_admin():
   ), 
   r.region_name, 
   t.terrain_name, 
-  g.good_name, 
+  it.item_name, 
   re.religion_name, 
   CONCAT(
     p.province_pops, 
@@ -326,8 +538,8 @@ async def build_province_list_admin():
   cc.country_id 
 FROM 
   provinces p NATURAL 
-  JOIN regions r NATURAL 
-  JOIN goods g NATURAL 
+  JOIN regions r LEFT 
+  JOIN items it ON p.good_id = it.item_id  NATURAL 
   JOIN terrains t NATURAL 
   JOIN religions re 
   INNER JOIN countries c ON p.country_id = c.country_id 
@@ -346,7 +558,6 @@ ORDER BY
     df = pd.DataFrame(table, columns=[
         'Prowincja (ID)', 'Region', 'Teren', 'Zasoby', 'Religia', 'Ludność', 'Status', 'Status2'])
     for i, row in df.iterrows():
-        print(df.at[i, 'Status'])
         if df.at[i, 'Status'] == 255:
             df.at[i, 'Status'] = f"\u001b[0;34mPuste\u001b[0;0m"
         elif df.at[i, 'Status'] == df.at[i, 'Status2']:
@@ -357,17 +568,17 @@ ORDER BY
     return df
 
 
-async def build_province_embed(province_id: int, country_id: int):
+async def build_province_embed(self, province_id: int, country_id: int):
     embeds = []
     connection = db.pax_engine.connect()
     (province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name,
      cid1, cn1, color, cid2, cn2, province_level, pop_limit, pop_income) = connection.execute(text(
         f'SELECT p.province_id, p.province_name, rg.region_name, t.terrain_name, t.terrain_image_url, '
-        f'rl.religion_name, g.good_name, c.country_id, c.country_name, c.country_color, cc.country_id, cc.country_name, '
+        f'rl.religion_name, i.item_name, c.country_id, c.country_name, c.country_color, cc.country_id, cc.country_name, '
         f'p.province_level, pl.province_pops_limit, pl.province_pops_income '
         f'FROM provinces p NATURAL JOIN religions rl '
         f'NATURAL JOIN terrains t '
-        f'JOIN item i ON p.good_id = i.item_id '
+        f'LEFT JOIN items i ON p.good_id = i.item_id '
         f'NATURAL JOIN regions rg '
         f"INNER JOIN countries c ON p.country_id = c.country_id "
         f"INNER JOIN countries cc ON p.controller_id = cc.country_id "
@@ -380,14 +591,17 @@ async def build_province_embed(province_id: int, country_id: int):
         good_name = "-"
     pops = connection.execute(text(
         f'SELECT SUM(province_pops) FROM provinces WHERE province_id = "{province_id}"')).fetchone()[0]
-    workers = connection.execute(text(
-        f'SELECT SUM(building_workers) FROM provinces NATURAL JOIN structures NATURAL JOIN buildings '
+    workers_needed = connection.execute(text(
+        f'SELECT SUM(building_workers * quantity) FROM provinces NATURAL JOIN structures NATURAL JOIN buildings '
         f'WHERE province_id = {province_id}')).fetchone()[0]
-    workers = workers if workers is not None else 0
-    conscripted = connection.execute(text(f"SELECT SUM(unit_manpower) FROM armies NATURAL JOIN units "
+    workers_needed = workers_needed if workers_needed is not None else 0
+    conscripted = connection.execute(text(f"SELECT COUNT(*) FROM armies "
                                           f"LEFT JOIN provinces ON armies.province_id = provinces.province_id "
-                                          f"WHERE armies.army_origin = {province_id}")).fetchone()[0]
+                                          f"WHERE armies.army_origin = {province_id} "
+                                          f"AND armies.army_conscripted = 1")).fetchone()[0]
     conscripted = conscripted if conscripted is not None else 0
+
+
 
     # Coloring controller names
     if cid1 == country_id:
@@ -401,8 +615,9 @@ async def build_province_embed(province_id: int, country_id: int):
 
     # Creating fields
     pop_field = pd.DataFrame([['Mieszkańcy:', f'{pops}/{pop_limit}'],
-                              ['Pracujący:', f'{workers} ({int(int(workers) / int(pops) * 100)}%)'],
-                              ['Powołani:', f'{conscripted}']], columns=['1234567890', '1234567890123456789012345'])
+                              ['Powołani:', f'{conscripted}'],
+                              ['Pracownicy:', f'{pops - conscripted}/{workers_needed}']],
+                             columns=['12345678901', '123456789012345678901234'])
     pop_field = pop_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
     pop_field = re.sub('..\\n..', '\n', pop_field).replace(' |', ' ')
 
@@ -420,20 +635,45 @@ async def build_province_embed(province_id: int, country_id: int):
     f4 = interactions.EmbedField(name="Zasoby", value=f"```{good_name}```", inline=True)
     f5 = interactions.EmbedField(name="Populacja", value=f"```{pop_field[2:-2]}```", inline=False)
     f6 = interactions.EmbedField(name="Status", value=f"```ansi\n{status_field[2:-2]}```", inline=False)
-    f7 = interactions.EmbedField(name="Budynki", value=f"```ansi\nWORK IN PROGRESS```", inline=False)
-    f8 = interactions.EmbedField(name="Ekonomia", value=f"```ansi\nWORK IN PROGRESS```", inline=False)
-    f9 = interactions.EmbedField(name="Armie", value=' ', inline=False)
-    fields = [f1, f2, f0, f3, f4, f5, f6, f7, f8, f9]
+    # f7 = interactions.EmbedField(name="Budynki", value=f"{building_description}", inline=False)
+    f7 = interactions.EmbedField(name="Ekonomia", value=' ', inline=False)
 
+    fields = [f1, f2, f0, f3, f4, f5, f6, f7]
+
+    # Get buildings info
+    province_inc = province_buildings_income(province_id)
+
+    if province_inc is not None:
+        sum_province_inc = sum_buildings_incomes([province_inc])
+        building_description = buildings_income_description(sum_province_inc.buildings_incomes)
+
+        building_description = building_description[1:].split('\u2028')
+        building_type_title = 'Budynki Produkcyjne'
+        buildings_lines = {}
+        for building_line in building_description:
+            if 'Budynki' in building_line:
+                building_type_title = building_line.strip()[1:-1]
+                buildings_lines[building_type_title] = []
+                continue
+            buildings_lines[building_type_title].append(building_line)
+        for building_type_title in buildings_lines:
+            pages = pagify(buildings_lines[building_type_title], max_char=1000)
+            for page in pages:
+                fields.append(interactions.EmbedField(name=building_type_title, value=page, inline=False))
+                building_type_title = ' '
+    else:
+        fields.append(interactions.EmbedField(name='Budynki', value='Brak.', inline=False))
+
+
+    embed_author = await country_author(self, cid1)
     image = interactions.EmbedAttachment(url=terrain_image_url)
     # Building the Embed
+
     embed = interactions.Embed(
         color=int(color, 16),
         title=f"{province_name} (#{province_id}), poziom {roman.toRoman(province_level)}",
-        #url=query[11],
-        #footer=embed_footer,
-        #thumbnail=embed_thumbnail,
-        #author=embed_author,
+        author=embed_author,
+        # description=description,
         fields=fields,
         images=[image]
     )
@@ -524,7 +764,6 @@ async def build_country_embed(self, country_id: int):
     embed = interactions.Embed(
         color=int(query[7], 16),
         title=query[5],
-        # description=result_countries[5],
         footer=embed_footer,
         url=query[11],
         thumbnail=embed_thumbnail,
@@ -570,7 +809,6 @@ async def build_item_embed_good(ctx, self, item_id: int, country_id: int, item_q
     embed = interactions.Embed(
         color=int(item_query[2], 16),
         title=f"{item_query[1]} #{item_query[0]}",
-        # description=result_countries[5],
         thumbnail=embed_thumbnail,
         author=embed_author,
         fields=[f1, f2, f3, f4]
@@ -885,9 +1123,6 @@ def ic_map():
         author=author,
         fields=[f1, f3, fb, f2, f4, f5]
     )
-    print(f1)
-    print(f2)
-    print(fb)
 
     return embed
 
@@ -1442,8 +1677,50 @@ def ic_province_rename():
 async def b_building_templates(self, country_id):
     connection = db.pax_engine.connect()
 
+    def makeline(building_mess: str, build_id: int):
+        can_build = True
+
+        building_costs = connection.execute(
+            text(f'''
+                    SELECT DISTINCT 
+                      b.building_emoji, b.building_name, it.item_emoji, it.item_name, bc.item_quantity, inv.quantity
+                    FROM 
+                      country_buildings cb NATURAL 
+                      JOIN buildings b NATURAL 
+                      JOIN buildings_cost bc NATURAL 
+                      JOIN items it 
+                      LEFT JOIN inventories inv ON it.item_id = inv.item_id 
+                    WHERE 
+                      bc.building_id = {build_id}
+                      AND (inv.country_id = {country_id})
+                    ''')).fetchall()
+        if not building_costs:
+            return [interactions.Embed(title=f"GM zapomniał dodać koszt budynku! ID: {build_id}")]
+        print(building_costs)
+        building_emoji, building_name = building_costs[0][0], building_costs[0][1]
+        building_line = f'{building_emoji} **{building_name}** - Koszt: '
+
+        for building_cost in building_costs:
+            item_emoji, item_name, cost, inventory = building_cost[2], building_cost[3], building_cost[4], \
+                building_cost[5]
+            inventory = inventory if inventory is not None else 0
+            if cost > inventory:  # Not enough items
+                can_build = False
+                building_line = building_line + f'{item_emoji} {item_name} [{inventory}/{cost}], '
+            else:
+                building_line = building_line + f'{item_emoji} **{item_name} [{inventory}/{cost}]**, '
+        building_line = building_line[:-1]
+        if can_build:
+            building_line = ":small_blue_diamond:" + building_line
+        else:
+            building_line = ":black_medium_small_square:" + building_line
+        print(building_line)
+        building_mess = building_mess + building_line[:-1] + '\n'
+
+        return building_mess
+
     building_message = ''
-    if country_id == '%':
+    if country_id == '%':  # If admin
         building_ids = connection.execute(
             text(f'''
                 SELECT 
@@ -1462,50 +1739,17 @@ async def b_building_templates(self, country_id):
                 FROM 
                   country_buildings 
                 WHERE
-                  country_id IN (255, {country_id});
+                  country_id IN (255, {country_id})
+                ORDER BY
+                  building_id
                 ''')).fetchall()
 
     for building_id in building_ids:
-        can_build = True
+        building_message = makeline(building_message, building_id[0])
 
-        print(building_id)
-        building_costs = connection.execute(
-            text(f'''
-            SELECT 
-              b.building_emoji, b.building_name, it.item_emoji, it.item_name, bc.item_quantity, inv.quantity
-            FROM 
-              country_buildings cb NATURAL 
-              JOIN buildings b NATURAL 
-              JOIN buildings_cost bc NATURAL 
-              JOIN items it 
-              LEFT JOIN inventories inv ON it.item_id = inv.item_id 
-            WHERE 
-              bc.building_id = {building_id[0]}
-              AND (inv.country_id = {country_id})
-            ''')).fetchall()
-        building_emoji, building_name = building_costs[0][0], building_costs[0][1]
-        building_line = f'{building_emoji} **{building_name}** - Koszt: '
-
-        for building_cost in building_costs:
-            item_emoji, item_name, cost, inventory = building_cost[2], building_cost[3], building_cost[4], \
-            building_cost[5]
-            inventory = inventory if inventory is not None else 0
-            if cost > inventory:  # Not enough items
-                can_build = False
-                building_line = building_line + f'{item_emoji} {item_name} [{inventory}/{cost}], '
-            else:
-                building_line = building_line + f'{item_emoji} **{item_name} [{inventory}/{cost}]**, '
-
-        if can_build:
-            building_line = ":green_circle:" + building_line
-        else:
-            building_line = ":red_circle:" + building_line
-
-        building_message = building_message + building_line + '\n'
     print(building_message)
-    print(len(building_message))
-
-    pages = await pagify(dataframe=building_message[:-2].split('\n'), max=3900)
+    pages = pagify(dataframe=building_message[:-1].split('\n'), max_char=3900)
+    print(pages)
 
     country_color = connection.execute(
         text(f'''
@@ -1547,50 +1791,40 @@ async def b_building_list(self, country_id):
                       country_id = {country_id};
                     ''')).fetchone()[0]
 
+    q = connection.execute(
+        text(f'''
+            SELECT 
+              province_id
+            FROM
+              provinces
+            WHERE
+              country_id = {country_id}
+            ''')).fetchall()
+    province_ids = [x for xs in q for x in xs]
+
+    incomes = []
+    # print(province_ids)
+    for province_id in province_ids:
+        income = province_buildings_income(province_id)
+        if income is None:
+            continue
+        incomes.append(income)
+
+    buildings = sum_buildings_incomes(incomes).buildings_incomes
+
     author = await country_author(self, country_id=country_id)
     footer = interactions.EmbedFooter(text=
                                       f"/building destroy [#27, #37] | "
                                       f"/building build [Kanonia] [1 Tartak, 2 Kopalnia]")
-    pages = [
-f"""
-TO JEST ATRAPA
 
-`Podstawowe Budynki`
-<:Tartak:1259978101442740327> **Tartak x13**  *[13/13 popów]* 100%
-<:small_triangle_up:1260292468704809071> <:Drewno:1259246014292820058> `39` Drewno
-
-<:Farma:1259978050536345723> **Farma x20**  *[17/20 popów]* 85% :exclamation:
-<:small_triangle_up:1260292468704809071> <:Zywnosc:1259245985272561815> `68` Żywność
-
-<:Weglarka:1259978130626449508> **Węglarka x7**  *[7/7 popów]* 100%
-<:small_triangle_up:1260292468704809071> <:Wegiel:1259254512447651930> `14` Węgiel
-<:small_triangle_down:1260292467044122636> <:Drewno:1259246014292820058> `21` Drewno
-
-<:Huta:1259978064352510057> **Huta x3**  *[3/3 popów]* 100%
-<:small_triangle_up:1260292468704809071> <:Zelazo:1259254532949676134> `3` Żelazo
-<:small_triangle_down:1260292467044122636> <:Wegiel:1259254512447651930> `3` Węgiel
-<:small_triangle_down:1260292467044122636> <:Kamien:1259246006990536764> `2` Kamień
-
-`Manufaktury`
-<:Miod:1260205434413908010><:Manufaktura:1259978081192644691> **Manufaktura (Miód)** *[1/1 popów]* 100%
-<:small_triangle_up:1260292468704809071> <:Talary:1259245998698659850> `100` Talary
-
-<:Porcelana:1260205446975717446><:Manufaktura:1259978081192644691> **Manufaktura (Porcelana)** *[0,7/1 popów]* 70% :exclamation:
-<:small_triangle_up:1260292468704809071> <:Talary:1259245998698659850> `100` Talary
-
-`Budynki Specjalne`
-<:Zywe_szklo:1260300476662939768><:Manufaktura:1259978081192644691> **Uprawy Żywego Szkła** *[1/1 popów]* 100%
-<:small_triangle_up:1260292468704809071> <:Zywe_szklo:1260300476662939768> `2` Żywe Szkło
-<:small_triangle_down:1260292467044122636> <:Zywnosc:1259245985272561815> `10` Żywność
-
-"""
-            ]
+    description = buildings_income_description(buildings).split('\n')
+    bits = pagify(description, 3900)
 
     embeds = []
-    for page in pages:
+    for bit in bits:
         embeds.append(interactions.Embed(
             title="Lista budynków",
-            description=page,
+            description=bit,
             author=author,
             footer=footer,
             color=int(country_color, 16)

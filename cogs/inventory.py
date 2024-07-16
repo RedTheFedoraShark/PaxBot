@@ -44,7 +44,6 @@ class Inventory(interactions.Extension):
         connection = db.pax_engine.connect()
 
         if country.startswith('<@') and country.endswith('>'):  # if a ping
-            # id = panstwo[2:-1]
             result = connection.execute(
                 text(
                     f'SELECT country_name FROM players NATURAL JOIN countries WHERE player_id = {country[2:-1]}')).fetchone()

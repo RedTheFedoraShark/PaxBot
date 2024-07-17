@@ -11,50 +11,6 @@ with open("./config/config.json") as f:
     configure = json.load(f)
 
 
-def province_income(income: list, province_id: int):
-    connection = db.pax_engine.connect()
-    # 1.1 Grabbing modifiers for the province (pops, terrains and others)
-    query = connection.execute(
-        text(f"SELECT SUM(building_workers * quantity), province_pops, terrain_id, country_id "
-             f"FROM provinces NATURAL JOIN structures NATURAL JOIN buildings "
-             f"WHERE province_id = {province_id}")).fetchone()
-    if query[0] is None and query[4] in (253, 254, 255):
-        return income
-    elif query[0] is None:
-        # 1.2 I love the IRS :)
-        autonomy_modifier = (100 - query[2]) / 100
-        income.append((query[4], 2, (int(query[1]) * 0.25) * autonomy_modifier))
-        return income
-    print(query)
-    population_modifier = query[1] / int(query[0])
-    if population_modifier > 1:
-        population_modifier = 1
-    autonomy_modifier = (100 - query[2]) / 100
-    print(population_modifier, autonomy_modifier)
-    # 1.2 I love the IRS :)
-    income.append((query[4], 2, (int(query[1]) * 0.25) * autonomy_modifier))
-    # 1.3 Bierzemy budynki jakie są w prowincji (typ budynku, ilość) i zbieramy info o ich przychodzie
-    # (typ itemu, ilość) oraz modyfikator terenu
-    query2 = connection.execute(
-        text(f"SELECT building_id, quantity, item_id, item_quantity, modifier "
-             f"FROM provinces NATURAL JOIN structures NATURAL JOIN buildings NATURAL JOIN buildings_production "
-             f"NATURAL JOIN terrains_modifiers "
-             f"WHERE terrain_id={query[3]}")).fetchall()
-    print(query2)
-    # Liczymy produkcję dla danego typu budynku, w danej prowincji
-    # production_quantity = ilość_budynków * (produkcja_budynku * (mod_populacji * mod_autonomii * mod_terenu))
-    # production_quantity = 3 * (10 * (0.785 * 0.5 * 1.5))
-    for row in query2:
-        terrain_modifier = (100 + row[4]) / 100
-        print(terrain_modifier)
-        if row[3] < 0:
-            production_quan = row[3]
-        else:
-            production_quan = row[1] * (row[3] * (population_modifier * autonomy_modifier * terrain_modifier))
-        income.append((query[4], row[2], production_quan))
-    return income
-
-
 # all class names from this file have to be included in def below
 def setup(bot):
     Province(bot)
@@ -96,6 +52,10 @@ class Province(interactions.Extension):
         else:
             admin_bool = False
 
+        number_of_provinces = db.pax_engine.connect().execute(text(
+            f'SELECT COUNT(*) FROM provinces'
+        )).fetchone()[0]
+
         if tryb == "pages":
             if admin_bool:
                 # print(f"CountryId {country_id}")
@@ -104,7 +64,7 @@ class Province(interactions.Extension):
                         f'SELECT province_id FROM provinces NATURAL JOIN countries '
                         f'WHERE country_id = {country_id[0]} OR controller_id = {country_id[0]}')).fetchall()
                 else:
-                    province_ids = list((x,) for x in range(1, 322))
+                    province_ids = list((x,) for x in range(1, number_of_provinces + 1))
             else:
                 country_id = db.pax_engine.connect().execute(text(
                     f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = "{ctx.author.id}"'
@@ -116,11 +76,21 @@ class Province(interactions.Extension):
             for province_id in province_ids:
                 non_dup_ids.add(province_id[0])
             non_dup_ids = sorted(non_dup_ids)
+
+            province_incomes = {}
+            summed_province_incomes = {}
+            for province_id in range(1, number_of_provinces + 1):
+                province_incomes[province_id] = models.get_province_income(province_id)
+                summed_province_incomes[province_id] = models.sum_item_incomes({province_id: province_incomes[province_id]})
+            print(summed_province_incomes[50])
+            print(type(summed_province_incomes[50].controller_id))
+            models.get_hunger(summed_province_incomes)
+
             pages = []
             if not country_id:
                 country_id = [0]
             for province_id in non_dup_ids:
-                page = await models.build_province_embed(self, province_id, country_id[0])
+                page = await models.build_province_embed(self, province_id, country_id[0], province_incomes)
                 # if returned value is a list, unpack it
                 if isinstance(page, list):
                     for p in page:
@@ -202,7 +172,7 @@ class Province(interactions.Extension):
             f'SELECT province_name FROM provinces'
         )).fetchall()
         all_names = [item for sublist in all_names for item in sublist]
-        print(all_names)
+        # print(all_names)
         if nowa_nazwa in all_names:
             await ctx.send(f"```ansi\nMoże być tylko jedna prowincja z daną nazwą!\n```")
             return

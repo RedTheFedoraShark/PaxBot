@@ -24,8 +24,9 @@ class Income:
         return (f"Income(pops={self.pops}, hunger={self.hunger}, country_id={self.country_id}, "
                 f"controller_id={self.controller_id}, buildings_incomes={self.buildings_incomes})")
 
-
         # Create an author element with country info for an embed
+
+
 async def country_author(self, country_id: int):
     connection = db.pax_engine.connect()
     query = connection.execute(text(
@@ -158,11 +159,15 @@ def get_province_income(province_id: int):
                 item_quantity = (item_quantity * workforce_modifier * 1 + terrain_modifiers[building_id][0] *
                                  1 + terrain_modifiers[building_id][1])
 
+            if country_id != controller_id:  # Halve income if occupied
+                item_quantity = item_quantity / 2
+
             building_income[item_id] = [item_quantity, item_name, item_emoji]
 
         resources[building_id] = [quantity, building_name, building_emoji, workforce_modifier,
                                   building_workers, building_income]
-    income = Income(pops=round(pops, 1), buildings_incomes=resources, country_id=country_id, controller_id=controller_id)
+    income = Income(pops=round(pops, 1), buildings_incomes=resources, country_id=country_id,
+                    controller_id=controller_id)
 
     # 250.0, {1: [3, 'Tartak', '<:Tartak:1259978101442740327> ', 0.45454545454545453, 1, {4: [1.3636363636363635, 'Drewno', '<:Drewno:1259246014292820058>']}]
     connection.close()
@@ -180,41 +185,42 @@ def sum_building_incomes(incomes: dict):
 
         controller_id = incomes[province_id].controller_id
         total_pops += incomes[province_id].pops
-        incomes[province_id] = incomes[province_id].buildings_incomes
 
     building_keys = set()
     for province_id in incomes:
-        for income_key in incomes[province_id]:
+        for income_key in incomes[province_id].buildings_incomes:
             building_keys.add(income_key)
 
     buildings = dict()
     for key in building_keys:
         buildings[key] = [0, "name", "emoji", 0, 0, dict()]
+        buildings[key] = {'quantity': 0, 'name': "name", 'emoji': "emoji", 'pops': 0, 'workers': 0,
+                          'resource': dict()}  # 39: [0.84, 'Cegły', '<:Cegly:1259246021746229248>']
 
     for province_id in incomes:
 
-        for income_key in incomes[province_id]:
+        for income_key in incomes[province_id].buildings_incomes:
             # print('\n')
 
-            quantity, name, emoji, pops, workers, resource = incomes[province_id][income_key]
+            quantity, name, emoji, pops, workers, resource = incomes[province_id].buildings_incomes[income_key]
             # print(f'{quantity}  {workers}  {pops}')
             # print(income)
-            buildings[income_key][3] = ((buildings[income_key][0] * buildings[income_key][3]) + (quantity * pops)) / (
-                    buildings[income_key][0] + quantity)
-            buildings[income_key][0] = buildings[income_key][0] + quantity
-            buildings[income_key][1] = name
-            buildings[income_key][2] = emoji
-            buildings[income_key][4] = workers
+            buildings[income_key]['pops'] = ((buildings[income_key]['quantity'] * buildings[income_key]['pops']) + (
+                                              quantity * pops)) / (buildings[income_key]['quantity'] + quantity)
+            buildings[income_key]['quantity'] = buildings[income_key]['quantity'] + quantity
+            buildings[income_key]['name'] = name
+            buildings[income_key]['emoji'] = emoji
+            buildings[income_key]['workers'] = workers
+            print(resource)
             for r_key in resource:  # 39: [0.84, 'Cegły', '<:Cegly:1259246021746229248>']
-                if r_key in buildings[income_key][5]:
-                    # print(
-                    #     f"{buildings[i_key][5][r_key][0]} = {buildings[i_key][5][r_key][0]} + {quantity} * {resource[r_key]}")
-                    buildings[income_key][5][r_key][0] = buildings[income_key][5][r_key][0] + quantity * \
-                                                         resource[r_key][0]
+                if r_key in buildings[income_key]['resource']:
+                    buildings[income_key]['resource'][r_key][0] = buildings[income_key]['resource'][r_key][0] + quantity * resource[r_key][0]
                 else:
-                    buildings[income_key][5][r_key] = resource[r_key]
-                    buildings[income_key][5][r_key][0] = buildings[income_key][5][r_key][0] * quantity
-            # print(buildings)
+                    buildings[income_key]['resource'][r_key] = resource[r_key]
+                    buildings[income_key]['resource'][r_key][0] = buildings[income_key]['resource'][r_key][0] * quantity
+
+
+            buildings[income_key]['quantity'] = round(buildings[income_key]['quantity'], 1)
 
     incomes = Income(pops=total_pops, buildings_incomes=buildings, country_id=country_id,
                      controller_id=controller_id)
@@ -232,31 +238,33 @@ def sum_item_incomes(incomes: dict):
 
         controller_id = incomes[province_id].controller_id
         total_pops += incomes[province_id].pops
-        incomes[province_id] = incomes[province_id].buildings_incomes
+        #  incomes[province_id] = incomes[province_id].buildings_incomes
 
     item_keys = set()
     for province_id in incomes:
-        for income_key in incomes[province_id]:
-            for item_key in incomes[province_id][income_key][5]:  # [2, 'Tartak', '<:Tartak:1259978101442740327> ', 1.0, 1, {4: [6.0, 'Drewno', '<:Drewno:1259246014292820058>']}]
+        for income_key in incomes[province_id].buildings_incomes:
+            for item_key in incomes[province_id].buildings_incomes[income_key][
+                5]:  # [2, 'Tartak', '<:Tartak:1259978101442740327> ', 1.0, 1, {4: [6.0, 'Drewno', '<:Drewno:1259246014292820058>']}]
                 item_keys.add(item_key)
-
 
     items = dict()
     for key in item_keys:
         items[key] = {'quantity': 0, 'name': 'name', 'emoji': 'emoji'}
 
-
     for province_id in incomes:
-        for income_key in incomes[province_id]:
-            for item_key in incomes[province_id][income_key][5]:
-                items[item_key]['name'] = incomes[province_id][income_key][5][item_key][1]
-                items[item_key]['emoji'] = incomes[province_id][income_key][5][item_key][2]
-                items[item_key]['quantity'] = items[item_key]['quantity'] + incomes[province_id][income_key][5][item_key][0]
+        for income_key in incomes[province_id].buildings_incomes:
+            quantity, name, emoji, pops, workers, resource = incomes[province_id].buildings_incomes[income_key]
 
-    print(f'Jebana: {controller_id}')
+            for item_key in incomes[province_id].buildings_incomes[income_key][5]:
+                items[item_key]['name'] = resource[item_key][1]
+                items[item_key]['emoji'] = resource[item_key][2]
+                items[item_key]['quantity'] = items[item_key]['quantity'] + resource[item_key][0] * quantity
+
+                items[item_key]['quantity'] = round(items[item_key]['quantity'], 1)
+
     incomes = Income(pops=total_pops, buildings_incomes=items, country_id=country_id,
                      controller_id=controller_id)
-    print(f'Kurwo: {incomes}')
+
     return incomes
 
 
@@ -265,11 +273,15 @@ def sum_item_incomes(incomes: dict):
 def get_hunger(incomes: {int: Income}):
     connection = db.pax_engine.connect()
     countries = {}
+    print('\n')
+    print(incomes)
+    print(incomes[52])
+    print('\n')
 
     for province_id in incomes:
-        countries[incomes[province_id].controller_id] = {'hunger': 1, 'pops_food_eaten': 0,
-                                                            'pops_self_sustaining': 0, 'army_food_eaten': 0,
-                                                            'food_produced': 0, 'country_food_reserves': 0}
+        countries[incomes[province_id].controller_id] = {'hunger': 1.0, 'pops_food_eaten': 0,
+                                                         'pops_self_sustaining': 0, 'army_food_eaten': 0,
+                                                         'food_produced': 0, 'country_food_reserves': 0}
 
     for country_id in countries:
         army_consumption = connection.execute(
@@ -285,11 +297,11 @@ def get_hunger(incomes: {int: Income}):
             army_consumption = 0
         else:
             army_consumption = float(army_consumption[0])
-        countries[country_id]['army_food_eaten'] = 0 - army_consumption
+        countries[country_id]['army_food_eaten'] = army_consumption
 
         food_reserves = connection.execute(
             text(f"""
-            SELECT quantity FROM inventories WHERE item_id = 3
+            SELECT quantity FROM inventories WHERE item_id = 3 AND country_id = {country_id}
             """)).fetchone()
         if not food_reserves:
             food_reserves = 0
@@ -302,9 +314,11 @@ def get_hunger(incomes: {int: Income}):
         for item_id in incomes[province_id].buildings_incomes:
             if item_id == 3:
                 province_food_production += incomes[province_id].buildings_incomes[item_id]['quantity']
+
         if province_food_production >= incomes[province_id].pops:
             incomes[province_id].hunger = 1
             countries[incomes[province_id].controller_id]['pops_self_sustaining'] += incomes[province_id].pops
+
         countries[incomes[province_id].controller_id]['pops_food_eaten'] += incomes[province_id].pops
         countries[incomes[province_id].controller_id]['food_produced'] += province_food_production
 
@@ -313,24 +327,27 @@ def get_hunger(incomes: {int: Income}):
             countries[country_id]['hunger'] = 1
         else:
             countries[country_id]['hunger'] = (
-    (countries[country_id]['food_produced'] + countries[country_id]['country_food_reserves'] - countries[country_id]['pops_self_sustaining'])/
-    (countries[country_id]['army_food_eaten'] + countries[country_id]['pops_food_eaten'] - countries[country_id]['pops_self_sustaining']))
+                    (countries[country_id]['food_produced'] + countries[country_id]['country_food_reserves'] -
+                     countries[country_id]['pops_self_sustaining']) /
+                    (countries[country_id]['army_food_eaten'] + countries[country_id]['pops_food_eaten'] -
+                     countries[country_id]['pops_self_sustaining']))
 
     for province_id in incomes:
         if incomes[province_id].hunger == 1:
             continue
         else:
             incomes[province_id].hunger = countries[incomes[province_id].controller_id]['hunger']
-    print(incomes[50])
-
 
     connection.close()
-    return {'countries': countries, 'incomes': incomes}
+    return {'countries': countries, 'hunger_incomes': incomes}
 
 
 def get_buildings_income_description(buildings: dict):
     def makeline(desc: str, build_id: int):
-        quantity, name, emoji, workers, pops, incomes = buildings[build_id]
+        #print(buildings)
+        #print(buildings[build_id])
+        #print(buildings[build_id].items())
+        quantity, name, emoji, workers, pops, incomes = buildings[build_id].values()
         if pops == 0:  # If the building doesn't use pops, don't add information about it to the line
             desc += f'\u2028{emoji} **{name} x{quantity}\n**'
         else:
@@ -339,12 +356,14 @@ def get_buildings_income_description(buildings: dict):
                          f'/{round(pops * quantity, 1)}]* {round(workers * 100, 1)}%\n')
             else:
                 desc += (f'\u2028{emoji} **{name} x{quantity}** *[{round(workers * pops * quantity, 1)}'
-                         f'/{round(pops * quantity, 1)}]* {round(workers * 100, 1)} % :exclamation:\n')
+                         f'/{round(pops * quantity, 1)}]* {round(workers * 100, 1)}% :exclamation:\n')
 
         for i_key in incomes:
             item_quantity, name, emoji = incomes[i_key]
             if item_quantity > 0:  # Assign an emoji indicator to income/cost
                 desc += f'<:small_triangle_up:1260292468704809071> {emoji} `{round(item_quantity, 1)}` {name}\n'
+            elif item_quantity == 0:
+                desc += f':small_orange_diamond: {emoji} `{round(item_quantity, 1)}` {name}\n'
             else:
                 desc += f'<:small_triangle_down:1260292467044122636> {emoji} `{round(item_quantity, 1)}` {name}\n'
         # desc += '\n'
@@ -396,6 +415,27 @@ def get_buildings_income_description(buildings: dict):
             description = makeline(description, building_id)
 
     connection.close()
+    return description
+
+
+def get_item_income_description(hunger_income: dict):
+    def makeline(desc: str, item_id: int):
+        item_quantity, name, emoji = hunger_income[item_id].values()
+
+        if item_quantity > 0:  # Assign an emoji indicator to income/cost
+            desc += f'<:small_triangle_up:1260292468704809071> {emoji} `{round(item_quantity, 1)}` {name}\n'
+        elif item_quantity == 0:
+            desc += f':small_orange_diamond: {emoji} `{round(item_quantity, 1)}` {name}\n'
+        else:
+            desc += f'<:small_triangle_down:1260292467044122636> {emoji} `{round(item_quantity, 1)}` {name}\n'
+        # desc += '\n'
+
+        return desc
+
+    description = ''
+    for item_id in hunger_income:
+        description = makeline(description, item_id)
+
     return description
 
 
@@ -702,7 +742,7 @@ ORDER BY
     return df
 
 
-async def build_province_embed(self, province_id: int, country_id: int, province_incomes: dict):
+async def build_province_embed(self, province_id: int, country_id: int, all_province_incomes: dict):
     embeds = []
     connection = db.pax_engine.connect()
     (province_id, province_name, region_name, terrain_name, terrain_image_url, religion_name, good_name,
@@ -725,15 +765,37 @@ async def build_province_embed(self, province_id: int, country_id: int, province
         good_name = "-"
     pops = connection.execute(text(
         f'SELECT SUM(province_pops) FROM provinces WHERE province_id = "{province_id}"')).fetchone()[0]
+    pops = float(pops) if pops is not None else 0
     workers_needed = connection.execute(text(
         f'SELECT SUM(building_workers * quantity) FROM provinces NATURAL JOIN structures NATURAL JOIN buildings '
         f'WHERE province_id = {province_id}')).fetchone()[0]
-    workers_needed = workers_needed if workers_needed is not None else 0
+    workers_needed = float(workers_needed) if workers_needed is not None else 0
     conscripted = connection.execute(text(f"SELECT COUNT(*) FROM armies "
                                           f"LEFT JOIN provinces ON armies.province_id = provinces.province_id "
                                           f"WHERE armies.army_origin = {province_id} "
                                           f"AND armies.army_conscripted = 1")).fetchone()[0]
-    conscripted = conscripted if conscripted is not None else 0
+    conscripted = float(conscripted) if conscripted is not None else 0
+
+    # Getting the predicted change of pops for the next round
+    if all_province_incomes['hunger_incomes'][province_id].hunger < 0.8:  # Subtract pop_income
+        if pops - pop_income < 0:  # Can't go below 0 pops
+            pop_income = pops
+        pop_change = f' 🔻{round(pop_income, 2)}/turę'
+    elif all_province_incomes['hunger_incomes'][province_id].hunger >= 1:  # Add pop_income
+        if pops + pop_income > pop_limit:  # Can't go above province cap
+            pop_income = pop_limit - pops
+        if pop_income <= 0:
+            pop_change = f' 🔸0/turę'
+        else:
+            pop_change = f' ▲{round(pop_income, 2)}/turę'
+    else:
+        pop_change = f' 🔸0/turę'
+
+    # Getting the workers percentage
+    if workers_needed == 0:
+        worker_percentage = ''
+    else:
+        worker_percentage = f' ({round(((pops - conscripted) / workers_needed) * 100, 1)}%)'
 
     # Coloring controller names
     if cid1 == country_id:
@@ -746,9 +808,9 @@ async def build_province_embed(self, province_id: int, country_id: int, province
         cn2 = f"\u001b[0;31m{cn2}\u001b[0;0m"
 
     # Creating fields
-    pop_field = pd.DataFrame([['Mieszkańcy:', f'{pops}/{pop_limit}'],
+    pop_field = pd.DataFrame([['Mieszkańcy:', f'{pops}/{pop_limit}{pop_change}'],
                               ['Powołani:', f'{conscripted}'],
-                              ['Pracownicy:', f'{pops - conscripted}/{workers_needed}']],
+                              ['Pracownicy:', f'{pops - conscripted}/{workers_needed}{worker_percentage}']],
                              columns=['12345678901', '123456789012345678901234'])
     pop_field = pop_field.to_markdown(index=False).split("\n", maxsplit=2)[2]
     pop_field = re.sub('..\\n..', '\n', pop_field).replace(' |', ' ')
@@ -767,15 +829,36 @@ async def build_province_embed(self, province_id: int, country_id: int, province
     f4 = interactions.EmbedField(name="Zasoby", value=f"```{good_name}```", inline=True)
     f5 = interactions.EmbedField(name="Populacja", value=f"```{pop_field[2:-2]}```", inline=False)
     f6 = interactions.EmbedField(name="Status", value=f"```ansi\n{status_field[2:-2]}```", inline=False)
-    # f7 = interactions.EmbedField(name="Budynki", value=f"{building_description}", inline=False)
-    f7 = interactions.EmbedField(name="Ekonomia", value=' ', inline=False)
 
-    fields = [f1, f2, f0, f3, f4, f5, f6, f7]
+    fields = [f1, f2, f0, f3, f4, f5, f6]
+
+    # Get economy info
+    if not 3 in all_province_incomes['hunger_incomes'][province_id].buildings_incomes:  # If no food
+        all_province_incomes['hunger_incomes'][province_id].buildings_incomes[3] = \
+            {'quantity': 0, 'name': 'Żywność', 'emoji': '<:Zywnosc:1259245985272561815>'}
+    if not 2 in all_province_incomes['hunger_incomes'][province_id].buildings_incomes:  # If no gold income
+        all_province_incomes['hunger_incomes'][province_id].buildings_incomes[2] = \
+            {'quantity': 0, 'name': 'Talary', 'emoji': '<:Talary:1259245998698659850>'}
+    all_province_incomes['hunger_incomes'][province_id].buildings_incomes[3]['quantity'] -= pops  # Subtract eaten food
+    all_province_incomes['hunger_incomes'][province_id].buildings_incomes[2]['quantity'] += pops * configure['POP_TAX']
+
+    economy_description = get_item_income_description(all_province_incomes['hunger_incomes'][province_id].buildings_incomes)
+    economy_lines = economy_description.split('\n')
+    economy_field_title = 'Ekonomia'
+
+    pages = pagify(economy_lines, max_char=1000)
+    for page in pages:
+        fields.append(interactions.EmbedField(name=economy_field_title, value=page, inline=False))
+        economy_field_title = ''
+
 
     # Get buildings info
     # print(f'building: {province_incomes[province_id]}')
-    if province_incomes[province_id].buildings_incomes:
-        summed_province_income = sum_building_incomes({province_id: province_incomes[province_id]})
+    if not all_province_incomes['province_incomes'][province_id].buildings_incomes:
+        fields.append(interactions.EmbedField(name='Budynki', value='Brak.', inline=False))
+    else:
+        summed_province_income = sum_building_incomes(
+            {province_id: all_province_incomes['province_incomes'][province_id]})
         building_description = get_buildings_income_description(summed_province_income.buildings_incomes)
 
         building_description = building_description[1:].split('\u2028')
@@ -792,8 +875,6 @@ async def build_province_embed(self, province_id: int, country_id: int, province
             for page in pages:
                 fields.append(interactions.EmbedField(name=building_type_title, value=page, inline=False))
                 building_type_title = ' '
-    else:
-        fields.append(interactions.EmbedField(name='Budynki', value='Brak.', inline=False))
 
     embed_author = await country_author(self, cid1)
     image = interactions.EmbedAttachment(url=terrain_image_url)

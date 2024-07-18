@@ -33,7 +33,6 @@ class Province(interactions.Extension):
     @interactions.slash_option(name='admin', description='Jesteś admin?',
                                opt_type=interactions.OptionType.STRING, )
     async def list(self, ctx: interactions.SlashContext, tryb: str, admin: str = ''):
-        # God forgive me for what I have done with this code.
         await ctx.defer()
         country_id = False
         index = 0
@@ -84,13 +83,14 @@ class Province(interactions.Extension):
                 summed_province_incomes[province_id] = models.sum_item_incomes({province_id: province_incomes[province_id]})
             print(summed_province_incomes[50])
             print(type(summed_province_incomes[50].controller_id))
-            models.get_hunger(summed_province_incomes)
+            all_province_incomes = models.get_hunger(summed_province_incomes)
+            all_province_incomes['province_incomes'] = province_incomes
 
             pages = []
             if not country_id:
                 country_id = [0]
             for province_id in non_dup_ids:
-                page = await models.build_province_embed(self, province_id, country_id[0], province_incomes)
+                page = await models.build_province_embed(self, province_id, country_id[0], all_province_incomes)
                 # if returned value is a list, unpack it
                 if isinstance(page, list):
                     for p in page:
@@ -134,7 +134,6 @@ class Province(interactions.Extension):
         nazwa.strip()
         nowa_nazwa.strip()
 
-        # Don't read this either.
         country_id = db.pax_engine.connect().execute(text(
             f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
         )).fetchone()

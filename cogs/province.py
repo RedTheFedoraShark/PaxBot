@@ -78,8 +78,9 @@ class Province(interactions.Extension):
 
             province_incomes = {}
             summed_province_incomes = {}
-            for province_id in range(1, number_of_provinces + 1):
-                province_incomes[province_id] = models.get_province_income(province_id)
+
+            province_incomes = models.get_provinces_income()
+            for province_id in non_dup_ids:
                 summed_province_incomes[province_id] = models.sum_item_incomes({province_id: province_incomes[province_id]})
             print(summed_province_incomes[50])
             print(type(summed_province_incomes[50].controller_id))

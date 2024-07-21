@@ -2,6 +2,8 @@ import random
 import interactions
 import json
 import re
+
+import numpy as np
 import pandas as pd
 from database import *
 from sqlalchemy import text
@@ -91,8 +93,10 @@ def get_province_modifiers(province_id):
         text(f"SELECT tm.building_id, tm.throughput_modifier, tm.input_modifier, tm.output_modifier "
              f"FROM provinces p NATURAL JOIN terrains t NATURAL JOIN terrains_modifiers tm "
              f"WHERE province_id = {province_id}")).fetchall()
+    print(q[0])
+    print(q[0]._mapping)
     if not q:  # No terrain modifiers, this should not happen ever
-        return
+        raise Exception('There are no terrain modifiers in your database. Add them, they can be blank.')
     terrain_modifiers = {}
     for tm in q:
         building_id, throughput_modifier, input_modifier, output_modifier = tm
@@ -120,58 +124,172 @@ def get_province_modifiers(province_id):
     return total_workers, pops, workforce_modifier, terrain_modifiers, country_id, controller_id
 
 
-# Calculate the income of a province by each building type
-# Output: [taxes, [building_id: [building_id, quantity, building_name, building_emoji, workforce_modifier,
-# building_workers [item_id: [item_name, item_emoji, quantity], [item_id: [item_name, item_emoji, quantity], ...]]]]
-def get_province_income(province_id: int):
+# Calculate the income of every building and assign them to a province
+# Output: {province_id: [taxes, [building_id: [building_id, quantity, building_name, building_emoji, workforce_modifier,
+# building_workers [item_id: [item_name, item_emoji, quantity], [item_id: [item_name, item_emoji, quantity], ...]]]]...}
+def get_provinces_income():
+    print('called')
     connection = db.pax_engine.connect()
 
-    q = get_province_modifiers(province_id)
-    # print(f"q = {q}")
-    if q is None:  # No buildings with income
-        return
-    total_workers, pops, workforce_modifier, terrain_modifiers, country_id, controller_id = q
+    # Get info about all provinces
+    q = connection.execute(
+        text(
+            f"""
+SELECT 
+  p.province_id, 
+  p.country_id, 
+  p.controller_id, 
+  p.terrain_id, 
+  p.province_pops AS pops, 
+  IFNULL(
+    SUM(b.building_workers * s.quantity), 
+    0
+  ) AS workers, 
+  IF(IFNULL(
+    p.province_pops / IFNULL(
+      SUM(b.building_workers * s.quantity), 
+      0
+    ), 
+    0
+  ) > 1, 1, IFNULL(
+    p.province_pops / IFNULL(
+      SUM(b.building_workers * s.quantity), 
+      0
+    ), 
+    0
+  )) AS workforce_modifier
+FROM 
+  provinces p 
+  LEFT JOIN structures s ON p.province_id = s.province_id 
+  LEFT JOIN buildings b ON s.building_id = b.building_id 
+GROUP BY 
+  p.province_id
+ORDER BY 
+  p.province_id
+        """)).fetchall()
+    # +-------------+------------+---------------+------------+------+---------+--------------------+
+    # | province_id | country_id | controller_id | terrain_id | pops | workers | workforce_modifier |
+    # +-------------+------------+---------------+------------+------+---------+--------------------+
+    # |           1 |        255 |           255 |          6 | 1.00 |       0 |           0.000000 |
+    # |           2 |        255 |           255 |          3 | 1.00 |       0 |           0.000000 |
+    # |           3 |        255 |           255 |          3 | 1.00 |       0 |           0.000000 |
+    if not q:  # This shouldn't happen ever. If it does, add provinces to the database.
+        raise Exception('There are no provinces in your database.')
+    provinces = q
 
-    # 2. Get buildings
-    buildings = connection.execute(
-        text(f"SELECT b.building_id, s.quantity, b.building_name, b.building_emoji, b.building_workers "
-             f"FROM provinces p NATURAL JOIN buildings b NATURAL JOIN structures s "
-             f"WHERE province_id = {province_id}")).fetchall()
-    if buildings is None:  # No buildings with income
-        return Income(pops, dict())
+    # Get all terrain modifiers
+    q = connection.execute(
+        text(
+            f"""
+SELECT 
+  tm.terrain_id,
+  tm.building_id, 
+  tm.throughput_modifier, 
+  tm.input_modifier, 
+  tm.output_modifier 
+FROM 
+  terrains_modifiers tm 
+        """)).fetchall()
+    # +------------+-------------+---------------------+----------------+-----------------+
+    # | terrain_id | building_id | throughput_modifier | input_modifier | output_modifier |
+    # +------------+-------------+---------------------+----------------+-----------------+
+    # |          1 |           1 |                   0 |              0 |               0 |
+    # |          1 |           2 |                   0 |              0 |               0 |
+    # |          1 |           3 |                   0 |              0 |               0 |
+    if not q:  # This shouldn't happen ever.
+        # If it does, cross join [terrains] and [buildings] and input it into the database.
+        raise Exception('There are no terrain modifiers in your database.')
+    tm = q
+    terrain_modifiers = np.array(tm, dtype='O')
 
-    # 3. Get production and apply modifiers
-    resources = {}
-    for building in buildings:
-        building_id, quantity, building_name, building_emoji, building_workers = building
-        q = connection.execute(
-            text(f"SELECT item_id, item_quantity, item_name, item_emoji FROM buildings_production NATURAL JOIN items "
-                 f"WHERE building_id = {building_id}")).fetchall()
-        if q is None: continue
+    # Get all structures built
+    q = connection.execute(
+        text(
+            f"""
+SELECT 
+  p.province_id, 
+  b.building_id, 
+  s.quantity, 
+  b.building_name, 
+  b.building_emoji, 
+  b.building_workers 
+FROM 
+  provinces p NATURAL 
+  JOIN buildings b NATURAL 
+  JOIN structures s;
+        """)).fetchall()
+    # +-------------+-------------+----------+---------------+----------------------------------+------------------+
+    # | province_id | building_id | quantity | building_name | building_emoji                   | building_workers |
+    # +-------------+-------------+----------+---------------+----------------------------------+------------------+
+    # |          50 |           1 |        1 | Tartak        | <:Tartak:1259978101442740327>    |                1 |
+    # |          50 |           2 |        1 | Farma         | <:Farma:1259978050536345723>     |                1 |
+    # |          50 |           3 |        1 | Kopalnia      | <:Kopalnia:1259978065988288624>  |                1 |
+    all_buildings = np.array(q, dtype='O')
 
-        building_income = {}
-        for income in q:
-            item_id, item_quantity, item_name, item_emoji = income
-            if item_quantity > 0:  # If income
-                item_quantity = (item_quantity * workforce_modifier * 1 + terrain_modifiers[building_id][0] *
-                                 1 + terrain_modifiers[building_id][2])
-            if item_quantity < 0:  # If cost
-                item_quantity = (item_quantity * workforce_modifier * 1 + terrain_modifiers[building_id][0] *
-                                 1 + terrain_modifiers[building_id][1])
+    # Get all buildings production
+    q = connection.execute(
+                    text(
+                        f"""
+SELECT 
+  bp.building_id,
+  bp.item_id, 
+  bp.item_quantity, 
+  i.item_name, 
+  i.item_emoji 
+FROM 
+  buildings_production bp NATURAL 
+  JOIN items i
+                        """)).fetchall()
+    # +-------------+---------+---------------+-------------------+------------------------------------------+
+    # | building_id | item_id | item_quantity | item_name         | item_emoji                               |
+    # +-------------+---------+---------------+-------------------+------------------------------------------+
+    # |           1 |       4 |             3 | Drewno            | <:Drewno:1259246014292820058>            |
+    # |           2 |       3 |             4 | Żywność           | <:Zywnosc:1259245985272561815>           |
+    # |           3 |       5 |             2 | Kamień            | <:Kamien:1259246006990536764>            |
+    buildings_production = np.array(q, dtype='O')
 
-            if country_id != controller_id:  # Halve income if occupied
-                item_quantity = item_quantity / 2
+    province_incomes = {}
+    for province in provinces:
+        province_id, country_id, controller_id, terrain_id, pops, workers, workforce_modifier = province
 
-            building_income[item_id] = [item_quantity, item_name, item_emoji]
+        # 2. Get province buildings
+        province_buildings = all_buildings[(all_buildings[:, 0] == province_id)]
+        if province_buildings is None:
+            return Income(pops, dict())
 
-        resources[building_id] = [quantity, building_name, building_emoji, workforce_modifier,
-                                  building_workers, building_income]
-    income = Income(pops=round(pops, 1), buildings_incomes=resources, country_id=country_id,
-                    controller_id=controller_id)
+        # 3. Get production and apply modifiers
+        resources = {}
+        for building in province_buildings:
+            province_id, building_id, quantity, building_name, building_emoji, building_workers = building
+            production = buildings_production[(buildings_production[:, 0] == building_id)]
+            if production is None: continue
+            province_terrain_modifiers = terrain_modifiers[(terrain_modifiers[:, 0] == terrain_id) &
+                                                           (terrain_modifiers[:, 1] == building_id)]
+
+            terrain_id, building_id, throughput_modifier, input_modifier, output_modifier = (
+                province_terrain_modifiers)[0]  # [[2 2 0 0 0]]
+            building_income = {}
+            for income in production:
+                building_id, item_id, item_quantity, item_name, item_emoji = income
+                if item_quantity > 0:  # If income
+                    item_quantity = (item_quantity * workforce_modifier * throughput_modifier * output_modifier)
+                if item_quantity < 0:  # If cost
+                    item_quantity = (item_quantity * workforce_modifier * throughput_modifier * input_modifier)
+
+                if country_id != controller_id:  # Halve income if occupied
+                    item_quantity = item_quantity / 2
+
+                building_income[item_id] = [item_quantity, item_name, item_emoji]
+
+            resources[building_id] = [quantity, building_name, building_emoji, workforce_modifier,
+                                      building_workers, building_income]
+        income = Income(pops=round(pops, 1), buildings_incomes=resources, country_id=country_id,
+                        controller_id=controller_id)
+        province_incomes[province_id] = income
 
     # 250.0, {1: [3, 'Tartak', '<:Tartak:1259978101442740327> ', 0.45454545454545453, 1, {4: [1.3636363636363635, 'Drewno', '<:Drewno:1259246014292820058>']}]
     connection.close()
-    return income
+    return province_incomes
 
 
 # Input a dict of provinces with incomes and return a single dict of buildings with summed incomes
@@ -206,7 +324,7 @@ def sum_building_incomes(incomes: dict):
             # print(f'{quantity}  {workers}  {pops}')
             # print(income)
             buildings[income_key]['pops'] = ((buildings[income_key]['quantity'] * buildings[income_key]['pops']) + (
-                                              quantity * pops)) / (buildings[income_key]['quantity'] + quantity)
+                    quantity * pops)) / (buildings[income_key]['quantity'] + quantity)
             buildings[income_key]['quantity'] = buildings[income_key]['quantity'] + quantity
             buildings[income_key]['name'] = name
             buildings[income_key]['emoji'] = emoji
@@ -214,11 +332,11 @@ def sum_building_incomes(incomes: dict):
             print(resource)
             for r_key in resource:  # 39: [0.84, 'Cegły', '<:Cegly:1259246021746229248>']
                 if r_key in buildings[income_key]['resource']:
-                    buildings[income_key]['resource'][r_key][0] = buildings[income_key]['resource'][r_key][0] + quantity * resource[r_key][0]
+                    buildings[income_key]['resource'][r_key][0] = buildings[income_key]['resource'][r_key][
+                                                                      0] + quantity * resource[r_key][0]
                 else:
                     buildings[income_key]['resource'][r_key] = resource[r_key]
                     buildings[income_key]['resource'][r_key][0] = buildings[income_key]['resource'][r_key][0] * quantity
-
 
             buildings[income_key]['quantity'] = round(buildings[income_key]['quantity'], 1)
 
@@ -352,10 +470,10 @@ def get_buildings_income_description(buildings: dict):
             desc += f'\u2028{emoji} **{name} x{quantity}\n**'
         else:
             if workers == 1:  # Add an exclamation mark where there is not enough pop to work
-                desc += (f'\u2028{emoji} **{name} x{quantity}** *[{round(workers * pops * quantity, 1)}'
+                desc += (f'\u2028{emoji} **{name} x{quantity}**\n*[{round(workers * pops * quantity, 1)}'
                          f'/{round(pops * quantity, 1)}]* {round(workers * 100, 1)}%\n')
             else:
-                desc += (f'\u2028{emoji} **{name} x{quantity}** *[{round(workers * pops * quantity, 1)}'
+                desc += (f'\u2028{emoji} **{name} x{quantity}**\n*[{round(workers * pops * quantity, 1)}'
                          f'/{round(pops * quantity, 1)}]* {round(workers * 100, 1)}% :exclamation:\n')
 
         for i_key in incomes:
@@ -842,7 +960,8 @@ async def build_province_embed(self, province_id: int, country_id: int, all_prov
     all_province_incomes['hunger_incomes'][province_id].buildings_incomes[3]['quantity'] -= pops  # Subtract eaten food
     all_province_incomes['hunger_incomes'][province_id].buildings_incomes[2]['quantity'] += pops * configure['POP_TAX']
 
-    economy_description = get_item_income_description(all_province_incomes['hunger_incomes'][province_id].buildings_incomes)
+    economy_description = get_item_income_description(
+        all_province_incomes['hunger_incomes'][province_id].buildings_incomes)
     economy_lines = economy_description.split('\n')
     economy_field_title = 'Ekonomia'
 
@@ -850,7 +969,6 @@ async def build_province_embed(self, province_id: int, country_id: int, all_prov
     for page in pages:
         fields.append(interactions.EmbedField(name=economy_field_title, value=page, inline=False))
         economy_field_title = ''
-
 
     # Get buildings info
     # print(f'building: {province_incomes[province_id]}')
@@ -872,9 +990,13 @@ async def build_province_embed(self, province_id: int, country_id: int, all_prov
             buildings_lines[building_type_title].append(building_line)
         for building_type_title in buildings_lines:
             pages = pagify(buildings_lines[building_type_title], max_char=1000)
-            for page in pages:
-                fields.append(interactions.EmbedField(name=building_type_title, value=page, inline=False))
+            for i, page in enumerate(pages):
+                fields.append(interactions.EmbedField(name=building_type_title, value=page, inline=True))
+                if i % 2 == 1:  # Add a blank inline=False field every second field to maintain two columns
+                    fields.append(f0)
                 building_type_title = ' '
+                if i == 0:
+                    building_type_title = '\u2800'
 
     embed_author = await country_author(self, cid1)
     image = interactions.EmbedAttachment(url=terrain_image_url)
@@ -2016,13 +2138,13 @@ async def b_building_list(self, country_id):
 
     incomes = {}
     # print(province_ids)
-    for province_id in province_ids:
-        income = get_province_income(province_id)
-        if income is None:
-            continue
-        incomes[province_id] = income
+    incomes = get_provinces_income()
 
-    buildings = sum_building_incomes(incomes).buildings_incomes
+    province_incomes = {}
+    for province_id in province_ids:
+        province_incomes[province_id] = incomes[province_id]
+
+    buildings = sum_building_incomes(province_incomes).buildings_incomes
 
     author = await country_author(self, country_id=country_id)
     footer = interactions.EmbedFooter(text=

@@ -60,7 +60,7 @@ class Building(interactions.Extension):
         return
 
     @building.subcommand(sub_cmd_description='Lista twoich szablonów budynków')
-    @interactions.slash_option(name='tryb', description='W jakim trybie wyświetlić informacje? (NIE DZIAŁA)',
+    @interactions.slash_option(name='tryb', description='W jakim trybie wyświetlić informacje? (NIE DZIAŁA - ZAWSZE PROSTY)',
                                opt_type=interactions.OptionType.STRING, required=True,
                                choices=[interactions.SlashCommandChoice(name="Dokładny", value="pages"),
                                         interactions.SlashCommandChoice(name="Prosty", value="list")])

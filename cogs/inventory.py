@@ -24,21 +24,7 @@ class Inventory(interactions.Extension):
     @inventory.subcommand(sub_cmd_name="list")
     @interactions.slash_option(name='country', opt_type=interactions.OptionType.STRING,
                                description='Podaj nazwę państwa lub oznacz gracza. Zostaw puste dla swojego.')
-    @interactions.slash_option(name='sort',
-                               opt_type=interactions.OptionType.STRING,
-                               description='Sortuj ekwipunek',
-                               choices=[
-                                   interactions.SlashCommandChoice(name='wg nazwy', value='name'),
-                                   interactions.SlashCommandChoice(name='wg ilości', value='count')
-                               ])
-    @interactions.slash_option(name='order',
-                               opt_type=interactions.OptionType.STRING,
-                               description='Rosnąco/Malejąco',
-                               choices=[
-                                   interactions.SlashCommandChoice(name='rosnąco', value='ASC'),
-                                   interactions.SlashCommandChoice(name='malejąco', value='DESC')
-                               ])
-    async def list(self, ctx: interactions.SlashContext, country: str = '', sort: str = 'name', order: str = 'ASC'):
+    async def list(self, ctx: interactions.SlashContext, country: str = ''):
 
         await ctx.defer()
         connection = db.pax_engine.connect()

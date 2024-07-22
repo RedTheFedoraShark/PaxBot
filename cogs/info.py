@@ -55,10 +55,9 @@ class Info(interactions.Extension):
                                    interactions.SlashCommandChoice(name="/building templates", value=18),
                                    interactions.SlashCommandChoice(name="/building build", value=19),
                                    interactions.SlashCommandChoice(name="/building destroy", value=20),
-                                   interactions.SlashCommandChoice(name="/building upgrade", value=21),
                                    # Provinces
-                                   interactions.SlashCommandChoice(name="/province list", value=22),
-                                   interactions.SlashCommandChoice(name="/province rename", value=23)]
+                                   interactions.SlashCommandChoice(name="/province list", value=21),
+                                   interactions.SlashCommandChoice(name="/province rename", value=22)]
                                )
     async def command(self, ctx: interactions.SlashContext, nazwa_komendy: int):
 
@@ -67,7 +66,7 @@ class Info(interactions.Extension):
                'ic_inventory_item', 'ic_inventory_give', 'ic_army_list', 'ic_army_templates', 'ic_army_recruit',
                'ic_army_disband', 'ic_army_reorg', 'ic_army_reinforce', 'ic_army_rename', 'ic_army_move',
                'ic_army_orders', 'ic_building_list', 'ic_building_templates', 'ic_building_build',
-               'ic_building_destroy', 'ic_building_upgrade', 'ic_province_list', 'ic_province_rename')
+               'ic_building_destroy', 'ic_province_list', 'ic_province_rename')
         pages = []
         for element in raw:
             pages.append(getattr(models, element)())

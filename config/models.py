@@ -3,6 +3,7 @@ import interactions
 import json
 import re
 
+import numpy
 import numpy as np
 import pandas as pd
 from database import *
@@ -93,8 +94,6 @@ def get_province_modifiers(province_id):
         text(f"SELECT tm.building_id, tm.throughput_modifier, tm.input_modifier, tm.output_modifier "
              f"FROM provinces p NATURAL JOIN terrains t NATURAL JOIN terrains_modifiers tm "
              f"WHERE province_id = {province_id}")).fetchall()
-    print(q[0])
-    print(q[0]._mapping)
     if not q:  # No terrain modifiers, this should not happen ever
         raise Exception('There are no terrain modifiers in your database. Add them, they can be blank.')
     terrain_modifiers = {}
@@ -128,7 +127,6 @@ def get_province_modifiers(province_id):
 # Output: {province_id: [taxes, [building_id: [building_id, quantity, building_name, building_emoji, workforce_modifier,
 # building_workers [item_id: [item_name, item_emoji, quantity], [item_id: [item_name, item_emoji, quantity], ...]]]]...}
 def get_provinces_income():
-    print('called')
     connection = db.pax_engine.connect()
 
     # Get info about all provinces
@@ -224,12 +222,14 @@ FROM
     # |          50 |           1 |        1 | Tartak        | <:Tartak:1259978101442740327>    |                1 |
     # |          50 |           2 |        1 | Farma         | <:Farma:1259978050536345723>     |                1 |
     # |          50 |           3 |        1 | Kopalnia      | <:Kopalnia:1259978065988288624>  |                1 |
-    all_buildings = np.array(q, dtype='O')
+    all_buildings = pd.DataFrame(q,
+                                 columns=['province_id', 'building_id', 'quantity', 'building_name', 'building_emoji',
+                                          'building_workers'])
 
     # Get all buildings production
     q = connection.execute(
-                    text(
-                        f"""
+        text(
+            f"""
 SELECT 
   bp.building_id,
   bp.item_id, 
@@ -248,18 +248,40 @@ FROM
     # |           3 |       5 |             2 | Kamień            | <:Kamien:1259246006990536764>            |
     buildings_production = np.array(q, dtype='O')
 
+    # Get all inventories
+    q = connection.execute(
+        text(
+            f"""
+SELECT 
+  item_id,
+  country_id,
+  quantity
+FROM 
+  inventories
+                        """)).fetchall()
+    # +---------+------------+----------+
+    # | item_id | country_id | quantity |
+    # +---------+------------+----------+
+    # |       1 |          1 |     0.00 |
+    # |       1 |          2 |     0.00 |
+    # |       1 |        253 |     0.00 |
+    inventories = pd.DataFrame(q, columns=['item_id', 'country_id', 'quantity'])
+
     province_incomes = {}
+    all_incomes = []
+    buildings_without_production = {}
     for province in provinces:
         province_id, country_id, controller_id, terrain_id, pops, workers, workforce_modifier = province
+        buildings_without_production[province_id] = []
 
         # 2. Get province buildings
-        province_buildings = all_buildings[(all_buildings[:, 0] == province_id)]
+        province_buildings = all_buildings.loc[all_buildings['province_id'] == province_id]
         if province_buildings is None:
             return Income(pops, dict())
 
         # 3. Get production and apply modifiers
         resources = {}
-        for building in province_buildings:
+        for i, building in province_buildings.iterrows():
             province_id, building_id, quantity, building_name, building_emoji, building_workers = building
             production = buildings_production[(buildings_production[:, 0] == building_id)]
             if production is None: continue
@@ -269,6 +291,10 @@ FROM
             terrain_id, building_id, throughput_modifier, input_modifier, output_modifier = (
                 province_terrain_modifiers)[0]  # [[2 2 0 0 0]]
             building_income = {}
+
+            if len(production) == 0:
+                buildings_without_production[province_id].append(
+                    [province_id, building_id, quantity, building_name, building_emoji, building_workers])
             for income in production:
                 building_id, item_id, item_quantity, item_name, item_emoji = income
                 if item_quantity > 0:  # If income
@@ -280,6 +306,10 @@ FROM
                     item_quantity = item_quantity / 2
 
                 building_income[item_id] = [item_quantity, item_name, item_emoji]
+                all_incomes.append(
+                    [province_id, round(pops, 1), country_id, controller_id, building_id, quantity, building_name,
+                     building_emoji, workforce_modifier, building_workers, building_income, item_id, item_quantity,
+                     item_name, item_emoji])
 
             resources[building_id] = [quantity, building_name, building_emoji, workforce_modifier,
                                       building_workers, building_income]
@@ -287,7 +317,74 @@ FROM
                         controller_id=controller_id)
         province_incomes[province_id] = income
 
-    # 250.0, {1: [3, 'Tartak', '<:Tartak:1259978101442740327> ', 0.45454545454545453, 1, {4: [1.3636363636363635, 'Drewno', '<:Drewno:1259246014292820058>']}]
+    all_incomes = pd.DataFrame(all_incomes,
+                               columns=['province_id', 'pops', 'country_id', 'controller_id', 'building_id', 'quantity',
+                                        'building_name', 'building_emoji', 'workforce_modifier', 'building_workers',
+                                        'building_income', 'item_id', 'item_quantity', 'item_name', 'item_emoji'])
+
+    resources_modifiers = []
+    for i, item in inventories.iterrows():
+        item_id, country_id, stockpile = item
+        summed_item_income = all_incomes.loc[
+            (all_incomes['item_id'] == item_id) & (all_incomes['country_id'] == country_id) & (
+                        all_incomes['item_quantity'] > 0), 'item_quantity'].sum()
+        summed_item_used = all_incomes.loc[
+            (all_incomes['item_id'] == item_id) & (all_incomes['country_id'] == country_id) & (
+                        all_incomes['item_quantity'] < 0), 'item_quantity'].sum()
+        if summed_item_used == 0:
+            resources_modifiers.append([country_id, item_id, 1])
+        elif (stockpile + summed_item_income) == 0:
+            resources_modifiers.append([country_id, item_id, 0])
+        else:
+            modifier = (stockpile + summed_item_income) / abs(summed_item_used)
+            if modifier > 1:
+                modifier = 1
+            resources_modifiers.append([country_id, item_id, modifier])
+    for r_modifier in resources_modifiers:
+        country_id, item_id, modifier = r_modifier
+        if modifier == 1:
+            continue
+        building_ids = all_incomes.loc[
+            (all_incomes['item_id'] == item_id) & (all_incomes['country_id'] == country_id) & (
+                        all_incomes['item_quantity'] < 0), 'building_id']
+        for row in building_ids.items():
+            # (index, building_id)
+            all_incomes.loc[(all_incomes['building_id'] == row[1]) & (
+                        all_incomes['country_id'] == country_id), 'item_quantity'] *= modifier
+
+    # Pack all of this into Incomes
+    for province in provinces:
+        province_id, country_id, controller_id, terrain_id, pops, workers, workforce_modifier = province
+
+        province_buildings = all_incomes.loc[(all_incomes['province_id'] == province_id)]
+        province_buildings = province_buildings[
+            ['province_id', 'building_id', 'quantity', 'building_name', 'building_emoji', 'building_workers']]
+        if buildings_without_production[province_id]:
+            bwp = pd.DataFrame(buildings_without_production[province_id],
+                               columns=['province_id', 'building_id', 'quantity', 'building_name', 'building_emoji',
+                                        'building_workers'])
+            province_buildings = pd.concat([province_buildings, pd.DataFrame(bwp)], ignore_index=True)
+        resources = {}
+        for i, building in province_buildings.iterrows():
+            province_id, building_id, quantity, building_name, building_emoji, building_workers = building
+
+            production = all_incomes.loc[
+                (all_incomes['province_id'] == province_id) & (all_incomes['building_id'] == building_id)]
+            production = production[['building_id', 'item_id', 'item_quantity', 'item_name', 'item_emoji']]
+            building_income = {}
+            for i, income in production.iterrows():
+                building_id, item_id, item_quantity, item_name, item_emoji = income
+
+                building_income[item_id] = [item_quantity, item_name, item_emoji]
+            resources[building_id] = [quantity, building_name, building_emoji, workforce_modifier,
+                                      building_workers, building_income]
+        income = Income(pops=round(pops, 1), buildings_incomes=resources, country_id=country_id,
+                        controller_id=controller_id)
+        province_incomes[province_id] = income
+
+    # 250.0, {
+    #   1: [3, 'Tartak', '<:Tartak:1259978101442740327> ', 0.45454545454545453, 1, {
+    #     4: [1.3636363636363635, 'Drewno', '<:Drewno:1259246014292820058>']}]}
     connection.close()
     return province_incomes
 
@@ -329,7 +426,6 @@ def sum_building_incomes(incomes: dict):
             buildings[income_key]['name'] = name
             buildings[income_key]['emoji'] = emoji
             buildings[income_key]['workers'] = workers
-            print(resource)
             for r_key in resource:  # 39: [0.84, 'Cegły', '<:Cegly:1259246021746229248>']
                 if r_key in buildings[income_key]['resource']:
                     buildings[income_key]['resource'][r_key][0] = buildings[income_key]['resource'][r_key][
@@ -391,10 +487,6 @@ def sum_item_incomes(incomes: dict):
 def get_hunger(incomes: {int: Income}):
     connection = db.pax_engine.connect()
     countries = {}
-    print('\n')
-    print(incomes)
-    print(incomes[52])
-    print('\n')
 
     for province_id in incomes:
         countries[incomes[province_id].controller_id] = {'hunger': 1.0, 'pops_food_eaten': 0,
@@ -2013,29 +2105,18 @@ async def b_building_templates(self, country_id):
     def makeline(building_mess: str, build_id: int):
         can_build = True
 
-        building_costs = connection.execute(
-            text(f'''
-                    SELECT DISTINCT 
-                      b.building_emoji, b.building_name, it.item_emoji, it.item_name, bc.item_quantity, inv.quantity
-                    FROM 
-                      country_buildings cb NATURAL 
-                      JOIN buildings b NATURAL 
-                      JOIN buildings_cost bc NATURAL 
-                      JOIN items it 
-                      LEFT JOIN inventories inv ON it.item_id = inv.item_id 
-                    WHERE 
-                      bc.building_id = {build_id}
-                      AND (inv.country_id = {country_id})
-                    ''')).fetchall()
+        building_costs = buildings_costs.loc[(buildings_costs['building_id'] == build_id) &
+                                             (buildings_costs['country_id'] == country_id)].values.tolist()
+        # ['building_id', 'country_id', 'building_emoji', 'building_name',
+        #  'item_emoji', 'item_name', 'cost_quantity', 'inv_quantity']
         if not building_costs:
             return [interactions.Embed(title=f"GM zapomniał dodać koszt budynku! ID: {build_id}")]
-        print(building_costs)
-        building_emoji, building_name = building_costs[0][0], building_costs[0][1]
+        building_emoji, building_name = building_costs[0][2], building_costs[0][3]
         building_line = f'{building_emoji} **{building_name}** - Koszt: '
 
         for building_cost in building_costs:
-            item_emoji, item_name, cost, inventory = building_cost[2], building_cost[3], building_cost[4], \
-                building_cost[5]
+            item_emoji, item_name, cost, inventory = building_cost[4], building_cost[5], building_cost[6], \
+                building_cost[7]
             inventory = inventory if inventory is not None else 0
             if cost > inventory:  # Not enough items
                 can_build = False
@@ -2047,14 +2128,13 @@ async def b_building_templates(self, country_id):
             building_line = ":small_blue_diamond:" + building_line
         else:
             building_line = ":black_medium_small_square:" + building_line
-        print(building_line)
         building_mess = building_mess + building_line[:-1] + '\n'
 
         return building_mess
 
     building_message = ''
     if country_id == '%':  # If admin
-        building_ids = connection.execute(
+        q = connection.execute(
             text(f'''
                 SELECT 
                   building_id
@@ -2065,7 +2145,7 @@ async def b_building_templates(self, country_id):
                 ''')).fetchall()
         country_id = 1
     else:
-        building_ids = connection.execute(
+        q = connection.execute(
             text(f'''
                 SELECT 
                   building_id
@@ -2076,13 +2156,46 @@ async def b_building_templates(self, country_id):
                 ORDER BY
                   building_id
                 ''')).fetchall()
+    building_ids = [x for xs in q for x in xs]
+
+    # Get all costs
+    q = connection.execute(
+        text(f'''
+SELECT 
+  b.building_id, 
+  inv.country_id, 
+  b.building_emoji, 
+  b.building_name, 
+  it.item_emoji, 
+  it.item_name, 
+  bc.item_quantity, 
+  inv.quantity 
+FROM 
+  country_buildings cb NATURAL 
+  JOIN buildings b NATURAL 
+  JOIN buildings_cost bc NATURAL 
+  JOIN items it 
+  LEFT JOIN inventories inv ON it.item_id = inv.item_id;
+                    ''')).fetchall()
+    # +-------------+------------+-------------------------------+---------------+-------------------------------+
+    # | building_id | country_id | building_emoji                | building_name | item_emoji                    |
+    # +-------------+------------+-------------------------------+---------------+-------------------------------+
+    # |           1 |          1 | <:Tartak:1259978101442740327> | Tartak        | <:Talary:1259245998698659850> |
+    # |           1 |          2 | <:Tartak:1259978101442740327> | Tartak        | <:Talary:1259245998698659850> |
+    # |           1 |        253 | <:Tartak:1259978101442740327> | Tartak        | <:Talary:1259245998698659850> |
+    # -----------+---------------+----------+
+    #  item_name | item_quantity | quantity |
+    # -----------+---------------+----------+
+    #  Talary    |           150 |     1.00 |
+    #  Talary    |           150 |     0.00 |
+    #  Talary    |           150 |     0.00 |
+    buildings_costs = pd.DataFrame(q, columns=['building_id', 'country_id', 'building_emoji', 'building_name',
+                                               'item_emoji', 'item_name', 'cost_quantity', 'inv_quantity'])
 
     for building_id in building_ids:
-        building_message = makeline(building_message, building_id[0])
+        building_message = makeline(building_message, building_id)
 
-    print(building_message)
     pages = pagify(dataframe=building_message[:-1].split('\n'), max_char=3900)
-    print(pages)
 
     country_color = connection.execute(
         text(f'''

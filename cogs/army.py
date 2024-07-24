@@ -263,7 +263,7 @@ class Army(interactions.Extension):
             f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
         )).fetchone()
 
-        if await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
+        if ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
             admin_bool = True
         else:
             admin_bool = False

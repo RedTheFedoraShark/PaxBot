@@ -19,50 +19,49 @@ class Info(interactions.Extension):
     def __init__(self, bot):
         self.bot = bot
 
-    @interactions.slash_command(description='Ściąga z komendami Pax Zeonica.', scopes=[configure['GUILD']])
-    async def commands(self, ctx):
-        await ctx.send(embeds=models.commands())
-
     @interactions.slash_command(description='Testuj', scopes=[configure['GUILD']])
     async def info(self, ctx: interactions.SlashContext):
         pass
+
+    @interactions.slash_command(description='Ściąga z komendami Pax Zeonica.', scopes=[configure['GUILD']])
+    async def commands(self, ctx):
+        await ctx.send(embeds=models.commands())
 
     @info.subcommand(sub_cmd_description="Informacje o komendach.")
     @interactions.slash_option(name="nazwa_komendy", description='Wpisz nazwę komendy którą chcesz sprawdzić.',
                                required=True, opt_type=interactions.OptionType.INTEGER,
                                choices=[  # Information
-                                   interactions.SlashCommandChoice(name="/tutorial", value=0),
-                                   interactions.SlashCommandChoice(name="/commands", value=1),
-                                   interactions.SlashCommandChoice(name="/info command", value=2),
-                                   interactions.SlashCommandChoice(name="/info country", value=3),
-                                   interactions.SlashCommandChoice(name="/map", value=4),
+                                   interactions.SlashCommandChoice(name="/commands", value=0),
+                                   interactions.SlashCommandChoice(name="/info command", value=1),
+                                   interactions.SlashCommandChoice(name="/info country", value=2),
+                                   interactions.SlashCommandChoice(name="/map", value=3),
                                    # Inventory
-                                   interactions.SlashCommandChoice(name="/inventory list", value=5),
-                                   interactions.SlashCommandChoice(name="/inventory item", value=6),
-                                   interactions.SlashCommandChoice(name="/inventory give", value=7),
+                                   interactions.SlashCommandChoice(name="/inventory list", value=4),
+                                   interactions.SlashCommandChoice(name="/inventory item", value=5),
+                                   interactions.SlashCommandChoice(name="/inventory give", value=6),
                                    # Army
-                                   interactions.SlashCommandChoice(name="/army list", value=8),
-                                   interactions.SlashCommandChoice(name="/army templates", value=9),
-                                   interactions.SlashCommandChoice(name="/army recruit", value=10),
-                                   interactions.SlashCommandChoice(name="/army disband", value=11),
-                                   interactions.SlashCommandChoice(name="/army reorg", value=12),
-                                   interactions.SlashCommandChoice(name="/army reinforce", value=13),
-                                   interactions.SlashCommandChoice(name="/army rename", value=14),
-                                   interactions.SlashCommandChoice(name="/army move", value=15),
-                                   interactions.SlashCommandChoice(name="/army orders", value=16),
+                                   interactions.SlashCommandChoice(name="/army list", value=7),
+                                   interactions.SlashCommandChoice(name="/army templates", value=8),
+                                   interactions.SlashCommandChoice(name="/army recruit", value=9),
+                                   interactions.SlashCommandChoice(name="/army disband", value=10),
+                                   interactions.SlashCommandChoice(name="/army reorg", value=11),
+                                   interactions.SlashCommandChoice(name="/army reinforce", value=12),
+                                   interactions.SlashCommandChoice(name="/army rename", value=13),
+                                   interactions.SlashCommandChoice(name="/army move", value=14),
+                                   interactions.SlashCommandChoice(name="/army orders", value=15),
                                    # Buildings
-                                   interactions.SlashCommandChoice(name="/building list", value=17),
-                                   interactions.SlashCommandChoice(name="/building templates", value=18),
-                                   interactions.SlashCommandChoice(name="/building build", value=19),
-                                   interactions.SlashCommandChoice(name="/building destroy", value=20),
+                                   interactions.SlashCommandChoice(name="/building list", value=16),
+                                   interactions.SlashCommandChoice(name="/building templates", value=17),
+                                   interactions.SlashCommandChoice(name="/building build", value=18),
+                                   interactions.SlashCommandChoice(name="/building destroy", value=19),
                                    # Provinces
-                                   interactions.SlashCommandChoice(name="/province list", value=21),
-                                   interactions.SlashCommandChoice(name="/province rename", value=22)]
+                                   interactions.SlashCommandChoice(name="/province list", value=20),
+                                   interactions.SlashCommandChoice(name="/province rename", value=21)]
                                )
     async def command(self, ctx: interactions.SlashContext, nazwa_komendy: int):
 
         command_name = nazwa_komendy
-        raw = ('ic_tutorial', 'ic_commands', 'ic_info_command', 'ic_info_country', 'ic_map', 'ic_inventory_list',
+        raw = ('ic_commands', 'ic_info_command', 'ic_info_country', 'ic_map', 'ic_inventory_list',
                'ic_inventory_item', 'ic_inventory_give', 'ic_army_list', 'ic_army_templates', 'ic_army_recruit',
                'ic_army_disband', 'ic_army_reorg', 'ic_army_reinforce', 'ic_army_rename', 'ic_army_move',
                'ic_army_orders', 'ic_building_list', 'ic_building_templates', 'ic_building_build',
@@ -78,7 +77,7 @@ class Info(interactions.Extension):
 
     @info.subcommand(sub_cmd_description="Informacje o krajach.")
     @interactions.slash_option(name='kraj', description='Wpisz dokładną nazwę kraju lub zpinguj gracza.',
-                               required=False, opt_type=interactions.OptionType.STRING)
+                               required=False, opt_type=interactions.OptionType.STRING, autocomplete=True)
     async def country(self, ctx: interactions.SlashContext, kraj: str = ''):
 
         country = kraj
@@ -123,3 +122,21 @@ class Info(interactions.Extension):
         paginator = Paginator.create_from_embeds(ctx.client, *pages)
         paginator.page_index = country_id[0] - 1
         await paginator.send(ctx=ctx)
+
+    @country.autocomplete('kraj')
+    async def item_autocomplete(self, ctx: interactions.AutocompleteContext):
+        countries = db.pax_engine.connect().execute(text(
+            f'SELECT country_name FROM countries WHERE NOT (country_id IN (253, 254, 255))')).fetchall()
+        country = ctx.input_text
+        if country == "":
+            del countries[24:]  # Make sure that at most 25 options are available at once
+            choices = [
+                interactions.SlashCommandChoice(name=country_name[0], value=country_name[0])
+                for country_name in countries
+            ]
+        else:
+            choices = [
+                interactions.SlashCommandChoice(name=country_name[0], value=country_name[0])
+                for country_name in countries if str.lower(country) in str.lower(country_name[0])
+            ]
+        await ctx.send(choices)

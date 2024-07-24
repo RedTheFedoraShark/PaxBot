@@ -8,6 +8,7 @@ import json
 with open("./config/config.json") as f:
     configure = json.load(f)
 
+
 def setup(bot):
     Inventory(bot)
 
@@ -22,75 +23,70 @@ class Inventory(interactions.Extension):
         return
 
     @inventory.subcommand(sub_cmd_name="list")
-    @interactions.slash_option(name='country', opt_type=interactions.OptionType.STRING,
-                               description='Podaj nazwę państwa lub oznacz gracza. Zostaw puste dla swojego.')
-    async def list(self, ctx: interactions.SlashContext, country: str = ''):
-
+    @interactions.slash_option(name='tryb', description='W jakim trybie wyświetlić informacje? (NIE DZIAŁA - ZAWSZE PROSTY)',
+                               opt_type=interactions.OptionType.STRING, required=True,
+                               choices=[interactions.SlashCommandChoice(name="Dokładny", value="pages"),
+                                        interactions.SlashCommandChoice(name="Prosty", value="list")])
+    @interactions.slash_option(name='admin', opt_type=interactions.OptionType.STRING,
+                               description='Admin?')
+    async def list(self, ctx: interactions.SlashContext, tryb: str = '', admin: str = ''):
         await ctx.defer()
         connection = db.pax_engine.connect()
 
-        if country.startswith('<@') and country.endswith('>'):  # if a ping
-            result = connection.execute(
-                text(
-                    f'SELECT country_name FROM players NATURAL JOIN countries WHERE player_id = {country[2:-1]}')).fetchone()
-            if result is None:
-                await ctx.send('Ten gracz nie ma przypisanego państwa.')
-                connection.close()
-                return
-            country = result[0]
-        elif country != '':
-            result = connection.execute(
-                text(f'SELECT country_name FROM countries WHERE country_name = "{country}"')).fetchone()
-            if result is None:
-                await ctx.send('Takie państwo nie istnieje.')
-                connection.close()
-                return
+        if admin != '' and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
+            if admin.startswith('<@') and admin.endswith('>'):  # if a ping
+                country_id = connection.execute(text(
+                    f'SELECT country_id FROM players NATURAL JOIN countries '
+                    f'WHERE player_id = {admin[2:-1]}')).fetchone()
+                if not country_id:
+                    await ctx.send(embed=interactions.Embed(description=f'Gracz **{admin}** nie ma państwa!'))
+                    connection.close()
+                    return
+                country_id = country_id[0]
+            else:
+                country_id = connection.execute(text(
+                    f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{admin}"'
+                )).fetchone()
+                if not country_id:
+                    await ctx.send(embed=interactions.Embed(description=f'Państwo **{admin}** nie istnieje!'))
+                    connection.close()
+                    return
+                country_id = country_id[0]
         else:
-            country = connection.execute(
-                text(
-                    f'SELECT country_name from players NATURAL JOIN countries WHERE player_id = {ctx.author.id};')).fetchone()[
-                0]
+            country_id = connection.execute(text(
+                f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
+            )).fetchone()
+            if not country_id:
+                await ctx.send(embed=interactions.Embed(description=f'Nie masz przypisanego państwa!'))
+                connection.close()
+                return
+            country_id = country_id[0]
 
-        result = connection.execute(
-            text(f'SELECT DISTINCT item_name, quantity, item_emoji '
-                 f'FROM inventories NATURAL JOIN countries NATURAL JOIN items '
-                 f'WHERE LOWER(country_name) = LOWER("{country}")')).fetchall()
+        pages = await models.b_inventory_list(self, country_id=country_id)
 
-        embed = interactions.Embed(
-            title=f'Magazyny państwa {country}',
-            footer=interactions.EmbedFooter(text='This is a footer.'),
-        )
-        items = ""
-        quantities = ""
-
-        for item, quantity, emoji in result:
-            if quantity == 0:
-                continue
-            items += f'{item}\n'
-            quantities += str(quantity) + '\n'
-
-        embed.add_field(name='Zasób', value=items, inline=True)
-        embed.add_field(name='Ilość', value=quantities, inline=True)
-        await ctx.send(embeds=embed)
+        if len(pages) == 1:
+            await ctx.send(embed=pages[0])
+        else:
+            paginator = Paginator.create_from_embeds(ctx.client, *pages)
+            await paginator.send(ctx=ctx)
 
         connection.close()
         return
 
     @inventory.subcommand(sub_cmd_name="item")
     @interactions.slash_option(name='item', description='O jakim itemie wyświetlić informacje?',
-                               opt_type=interactions.OptionType.STRING, required=True,
-                               autocomplete=True)
-    @interactions.slash_option(name='admin', description='Jesteś admin?.',
-                               opt_type=interactions.OptionType.STRING)
-    async def item(self, ctx: interactions.SlashContext, item: str, admin: str = ''):
+                               opt_type=interactions.OptionType.STRING, required=True, autocomplete=True)
+    @interactions.slash_option(name='admin', description='Admin?',
+                               opt_type=interactions.OptionType.BOOLEAN)
+    async def item(self, ctx: interactions.SlashContext, item: str, admin: bool = False):
         country_id = db.pax_engine.connect().execute(text(
             f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {ctx.author.id}')).fetchone()
 
-        if admin == "admin" and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
-            admin = True
+        if admin and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
+            is_admin = True
             query = db.pax_engine.connect().execute(text(f'SELECT item_id, item_name FROM items')).fetchall()
         else:
-            admin = False
+            is_admin = False
             query = db.pax_engine.connect().execute(text(
                 f'SELECT item_id, item_name FROM countries NATURAL JOIN inventories NATURAL JOIN items '
                 f'WHERE country_id = {country_id[0]} AND NOT quantity <= 0')).fetchall()
@@ -103,7 +99,7 @@ class Inventory(interactions.Extension):
         for row in query:
             single_list.append(row[0])
 
-        if admin:
+        if is_admin:
             pages = []
             for item_id in single_list:
                 embed = await models.build_item_embed_admin(item_id)
@@ -128,13 +124,14 @@ class Inventory(interactions.Extension):
                     paginator.page_index = index
                     await paginator.send(ctx=ctx)
 
-    @item.autocomplete("item")
+    @item.autocomplete('item')
     async def item_autocomplete(self, ctx: interactions.AutocompleteContext):
         items = db.pax_engine.connect().execute(text(
             f'SELECT item_name FROM players NATURAL JOIN countries NATURAL JOIN inventories NATURAL JOIN items '
             f'WHERE player_id = "{ctx.author.id}" AND quantity > 0')).fetchall()
         item = ctx.input_text
         if item == "":
+            del items[24:]  # Make sure that at most 25 options are available at once
             choices = [
                 interactions.SlashCommandChoice(name=item_name[0], value=item_name[0])
                 for item_name in items
@@ -148,10 +145,10 @@ class Inventory(interactions.Extension):
 
     @inventory.subcommand(sub_cmd_name="give")
     @interactions.slash_option(name='country', description='Wpisz dokładną nazwę kraju lub zpinguj gracza.',
-                               opt_type=interactions.OptionType.STRING)
+                               opt_type=interactions.OptionType.STRING, required=True)
     @interactions.slash_option(name='items', description='ilość nazwa_itemu1, ilość nazwa_itemu2',
-                               opt_type=interactions.OptionType.STRING)
-    @interactions.slash_option(name='admin', description='Jesteś admin?',
+                               opt_type=interactions.OptionType.STRING, required=True)
+    @interactions.slash_option(name='admin', description='Admin?',
                                opt_type=interactions.OptionType.BOOLEAN)
     async def give(self, ctx: interactions.SlashContext, country: str, items: str, admin: bool = False):
         await ctx.defer()
@@ -160,13 +157,13 @@ class Inventory(interactions.Extension):
 
         if admin:
             if not ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
-                await ctx.send("You have no power here!")
+                await ctx.send(embed=interactions.Embed(description=f'You have no power here!'))
                 return
         else:
             author_country = connection.execute(
                 text(f'SELECT country_id FROM players WHERE player_id = "{ctx.author.id}"')).fetchone()
             if author_country is None:
-                await ctx.send('Nie masz przypisanego żadnego państwa!')
+                await ctx.send(embed=interactions.Embed(description=f'Nie masz przypisanego państwa!'))
                 connection.close()
                 return
 
@@ -175,7 +172,7 @@ class Inventory(interactions.Extension):
             result = connection.execute(text(
                 f'SELECT country_id FROM players WHERE player_id = {country[2:-1]};')).fetchone()
             if result is None:
-                await ctx.send('Ten gracz nie ma przypisanego państwa.')
+                await ctx.send(embed=interactions.Embed(description=f'Gracz **{country}** nie ma państwa!'))
                 connection.close()
                 return
             country = result[0]
@@ -183,7 +180,7 @@ class Inventory(interactions.Extension):
             result = connection.execute(
                 text(f'SELECT country_id FROM countries WHERE LOWER(country_name) = LOWER("{country}");')).fetchone()
             if result is None:
-                await ctx.send(f'Państwo "{country}" nie istnieje.')
+                await ctx.send(embed=interactions.Embed(description=f'Państwo **{country}** nie istnieje!'))
                 connection.close()
                 return
             country = result[0]
@@ -277,91 +274,3 @@ class Inventory(interactions.Extension):
         await ctx.send(f'Przekazano: {endmessage[0:-2:1]} państwu {country_name}.')
 
         connection.close()
-
-    ###############
-    # admin debug #
-    ###############
-
-    # @inventory.subcommand(description='!ADMIN ONLY!')
-    # @interactions.slash_option(name='country', description='a')
-    # @interactions.slash_option(name='items', description='b')
-    # async def add(self, ctx: interactions.SlashContext, country: str, items: str):
-    #     if not await ctx.author.has_permissions(interactions.Permissions.ADMINISTRATOR):
-    #         await ctx.send("You have no power here!")
-    #         return
-    #
-    #     await ctx.defer()
-    #
-    #     connection = db.pax_engine.connect()
-    #     if country.startswith('<@') and country.endswith('>'):  # if a ping
-    #         # id = panstwo[2:-1]
-    #         result = connection.execute(text(
-    #             f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {country[2:-1]};')).fetchone()
-    #         if result is None:
-    #             await ctx.send('Ten gracz nie ma przypisanego państwa.')
-    #             connection.close()
-    #             return
-    #         country = result[0]
-    #     else:
-    #         result = connection.execute(
-    #             text(f'SELECT country_id FROM countries WHERE LOWER(country_name) = LOWER("{country}");')).fetchone()
-    #         if result is None:
-    #             await ctx.send(f'Państwo "{country}" nie istnieje.')
-    #             connection.close()
-    #             return
-    #         country = result[0]
-    #
-    #     items = items.lower()
-    #     items = items.split(',')
-    #     for i in range(len(items)):
-    #         items[i] = items[i].strip()
-    #         items[i] = items[i].split(' ')
-    #         result = connection.execute(
-    #             text(f'SELECT item_id FROM items WHERE LOWER(item_name) = LOWER("{items[i][0]}");')).fetchone()
-    #         if result is None:
-    #             await ctx.send(f'Nie istnieje przedmiot o nazwie: {items[i][0]}!')
-    #             return
-    #         items[i].append(result[0])
-    #
-    #     # for i in range(len(items)):
-    #     #     items[i] = items[i].split()
-    #     endqueries = []
-    #     endmessage = ''
-    #     result = connection.execute(
-    #         text(f'SELECT DISTINCT LOWER(item_name), quantity, item_id FROM inventories '
-    #              f'NATURAL JOIN countries NATURAL JOIN items '
-    #              f'WHERE country_id = {country};')).fetchall()
-    #     # Now iterate through items and amounts and if there is something in result -> increase quantity.
-    #     # Update. Then insert into the rest
-    #     for item in items:
-    #         found = False
-    #         for row in result:
-    #             if item[0] == row[0]:
-    #                 found = True
-    #                 endqueries.append(
-    #                     f'UPDATE inventories SET quantity = quantity + {item[1]} '
-    #                     f'WHERE item_id = {item[2]} and country_id = {country};')
-    #                 endmessage += f'{item[1]} {item[0]}, '
-    #                 break
-    #         if not found:
-    #             endqueries.append(
-    #                 f'INSERT INTO inventories VALUES ({item[2]},{country},{item[1]});')
-    #     connection.rollback()
-    #
-    #     connection.begin()
-    #     for query in endqueries:
-    #         try:
-    #             connection.execute(text(query))
-    #         except:
-    #             connection.rollback()
-    #             await ctx.send(
-    #                 'Ojoj! Coś poszło nie tak. Spróbuj ponownie później lub skontaktuj się z administratorem.')
-    #             return
-    #     connection.commit()
-    #
-    #     country_name = connection.execute(
-    #         text(f'SELECT country_name FROM countries WHERE country_id = {country};')).fetchone()[0]
-    #     await ctx.send(f'Przekazano: {endmessage[0:-2:1]} państwu {country_name}.')
-    #
-    #     connection.close()
-    #     return

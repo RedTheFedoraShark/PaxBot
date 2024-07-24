@@ -17,10 +17,12 @@ intents.message_content = True
 
 """Declare bot and add all cogs"""
 # bot = commands.Bot(command_prefix=config['Prefix'], intents=intents)
-bot = interactions.Client(token=configure['TOKEN'], intents=intents, logging=logging.INFO)
+bot = interactions.Client(token=configure['TOKEN'], intents=intents, logging=logging.INFO,
+                          delete_unused_application_cmds=True)
 
-bot.load_extension('interactions.ext.sentry', dsn="https://3cdb51a1282cf049c4565735aad4d413@o4507509505458176.ingest.de.sentry.io/4507509639282768")
-
+bot.load_extension('interactions.ext.sentry',
+                   dsn="https://3cdb51a1282cf049c4565735aad4d413@o4507509505458176."
+                       "ingest.de.sentry.io/4507509639282768")
 defdump.load_extensions(bot)
 
 

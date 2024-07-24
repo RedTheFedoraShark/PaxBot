@@ -126,7 +126,7 @@ def get_province_modifiers(province_id):
 # Calculate the income of every building and assign them to a province
 # Output: {province_id: [taxes, [building_id: [building_id, quantity, building_name, building_emoji, workforce_modifier,
 # building_workers [item_id: [item_name, item_emoji, quantity], [item_id: [item_name, item_emoji, quantity], ...]]]]...}
-def get_provinces_income():
+def get_provinces_incomes():
     connection = db.pax_engine.connect()
 
     # Get info about all provinces
@@ -327,10 +327,10 @@ FROM
         item_id, country_id, stockpile = item
         summed_item_income = all_incomes.loc[
             (all_incomes['item_id'] == item_id) & (all_incomes['country_id'] == country_id) & (
-                        all_incomes['item_quantity'] > 0), 'item_quantity'].sum()
+                    all_incomes['item_quantity'] > 0), 'item_quantity'].sum()
         summed_item_used = all_incomes.loc[
             (all_incomes['item_id'] == item_id) & (all_incomes['country_id'] == country_id) & (
-                        all_incomes['item_quantity'] < 0), 'item_quantity'].sum()
+                    all_incomes['item_quantity'] < 0), 'item_quantity'].sum()
         if summed_item_used == 0:
             resources_modifiers.append([country_id, item_id, 1])
         elif (stockpile + summed_item_income) == 0:
@@ -346,11 +346,11 @@ FROM
             continue
         building_ids = all_incomes.loc[
             (all_incomes['item_id'] == item_id) & (all_incomes['country_id'] == country_id) & (
-                        all_incomes['item_quantity'] < 0), 'building_id']
+                    all_incomes['item_quantity'] < 0), 'building_id']
         for row in building_ids.items():
             # (index, building_id)
             all_incomes.loc[(all_incomes['building_id'] == row[1]) & (
-                        all_incomes['country_id'] == country_id), 'item_quantity'] *= modifier
+                    all_incomes['country_id'] == country_id), 'item_quantity'] *= modifier
 
     # Pack all of this into Incomes
     for province in provinces:
@@ -374,17 +374,30 @@ FROM
             building_income = {}
             for i, income in production.iterrows():
                 building_id, item_id, item_quantity, item_name, item_emoji = income
+                pos_item_quantity = 0
+                neg_item_quantity = 0
+                if item_quantity > 0:
+                    pos_item_quantity += item_quantity
+                else:
+                    neg_item_quantity += item_quantity
 
-                building_income[item_id] = [item_quantity, item_name, item_emoji]
+                building_income[item_id] = [pos_item_quantity, neg_item_quantity, item_name, item_emoji]
             resources[building_id] = [quantity, building_name, building_emoji, workforce_modifier,
                                       building_workers, building_income]
         income = Income(pops=round(pops, 1), buildings_incomes=resources, country_id=country_id,
                         controller_id=controller_id)
         province_incomes[province_id] = income
+    # >>> buildings_incomes
+    # {
+    #   1: [1, 'Tartak', '<:Tartak:1259978101442740327> ', 0.432727, 1, {
+    #     4: [1.298181, 'Drewno', '<:Drewno:1259246014292820058>']
+    #   }],
+    #   3: [1, 'Kopalnia', '<:Kopalnia:1259978065988288624>', 0.432727, 1, {
+    #     5: [0.865454, 'Kamień', '<:Kamien:1259246006990536764>']
+    #   }],
+    #   4: [1, 'Stadnina', ...
+    # }
 
-    # 250.0, {
-    #   1: [3, 'Tartak', '<:Tartak:1259978101442740327> ', 0.45454545454545453, 1, {
-    #     4: [1.3636363636363635, 'Drewno', '<:Drewno:1259246014292820058>']}]}
     connection.close()
     return province_incomes
 
@@ -406,11 +419,11 @@ def sum_building_incomes(incomes: dict):
         for income_key in incomes[province_id].buildings_incomes:
             building_keys.add(income_key)
 
-    buildings = dict()
+    buildings = {}
     for key in building_keys:
-        buildings[key] = [0, "name", "emoji", 0, 0, dict()]
+        buildings[key] = [0, "name", "emoji", 0, 0, {}]
         buildings[key] = {'quantity': 0, 'name': "name", 'emoji': "emoji", 'pops': 0, 'workers': 0,
-                          'resource': dict()}  # 39: [0.84, 'Cegły', '<:Cegly:1259246021746229248>']
+                          'resource': {}}  # 39: [0.84, 'Cegły', '<:Cegly:1259246021746229248>']
 
     for province_id in incomes:
 
@@ -426,13 +439,16 @@ def sum_building_incomes(incomes: dict):
             buildings[income_key]['name'] = name
             buildings[income_key]['emoji'] = emoji
             buildings[income_key]['workers'] = workers
-            for r_key in resource:  # 39: [0.84, 'Cegły', '<:Cegly:1259246021746229248>']
+            for r_key in resource:  # 39: [0.84, -0, 'Cegły', '<:Cegly:1259246021746229248>']
                 if r_key in buildings[income_key]['resource']:
                     buildings[income_key]['resource'][r_key][0] = buildings[income_key]['resource'][r_key][
                                                                       0] + quantity * resource[r_key][0]
+                    buildings[income_key]['resource'][r_key][1] = buildings[income_key]['resource'][r_key][
+                                                                      1] + quantity * resource[r_key][1]
                 else:
                     buildings[income_key]['resource'][r_key] = resource[r_key]
                     buildings[income_key]['resource'][r_key][0] = buildings[income_key]['resource'][r_key][0] * quantity
+                    buildings[income_key]['resource'][r_key][1] = buildings[income_key]['resource'][r_key][1] * quantity
 
             buildings[income_key]['quantity'] = round(buildings[income_key]['quantity'], 1)
 
@@ -457,24 +473,28 @@ def sum_item_incomes(incomes: dict):
     item_keys = set()
     for province_id in incomes:
         for income_key in incomes[province_id].buildings_incomes:
-            for item_key in incomes[province_id].buildings_incomes[income_key][
-                5]:  # [2, 'Tartak', '<:Tartak:1259978101442740327> ', 1.0, 1, {4: [6.0, 'Drewno', '<:Drewno:1259246014292820058>']}]
+            for item_key in incomes[province_id].buildings_incomes[income_key][5]:
+                # [2, 'Tartak', '<:Tartak:1259978101442740327> ', 1.0, 1, {4: [6.0, -2.0, 'Drewno',
+                # '<:Drewno:1259246014292820058>']}]
                 item_keys.add(item_key)
 
-    items = dict()
+    items = {}
     for key in item_keys:
-        items[key] = {'quantity': 0, 'name': 'name', 'emoji': 'emoji'}
+        items[key] = {'pos_quantity': 0, 'neg_quantity': 0, 'name': 'name', 'emoji': 'emoji'}
 
     for province_id in incomes:
         for income_key in incomes[province_id].buildings_incomes:
             quantity, name, emoji, pops, workers, resource = incomes[province_id].buildings_incomes[income_key]
 
             for item_key in incomes[province_id].buildings_incomes[income_key][5]:
-                items[item_key]['name'] = resource[item_key][1]
-                items[item_key]['emoji'] = resource[item_key][2]
-                items[item_key]['quantity'] = items[item_key]['quantity'] + resource[item_key][0] * quantity
+                items[item_key]['name'] = resource[item_key][2]
+                items[item_key]['emoji'] = resource[item_key][3]
+                items[item_key]['pos_quantity'] = items[item_key]['pos_quantity'] + resource[item_key][0] * quantity
+                items[item_key]['neg_quantity'] = items[item_key]['neg_quantity'] + resource[item_key][1] * quantity
 
-                items[item_key]['quantity'] = round(items[item_key]['quantity'], 1)
+            for item_key in incomes[province_id].buildings_incomes[income_key][5]:
+                items[item_key]['pos_quantity'] = round(items[item_key]['pos_quantity'], 1)
+                items[item_key]['neg_quantity'] = round(items[item_key]['neg_quantity'], 1)
 
     incomes = Income(pops=total_pops, buildings_incomes=items, country_id=country_id,
                      controller_id=controller_id)
@@ -523,7 +543,8 @@ def get_hunger(incomes: {int: Income}):
         province_food_production = 0
         for item_id in incomes[province_id].buildings_incomes:
             if item_id == 3:
-                province_food_production += incomes[province_id].buildings_incomes[item_id]['quantity']
+                province_food_production += incomes[province_id].buildings_incomes[item_id]['pos_quantity']
+                province_food_production += incomes[province_id].buildings_incomes[item_id]['neg_quantity']
 
         if province_food_production >= incomes[province_id].pops:
             incomes[province_id].hunger = 1
@@ -569,7 +590,8 @@ def get_buildings_income_description(buildings: dict):
                          f'/{round(pops * quantity, 1)}]* {round(workers * 100, 1)}% :exclamation:\n')
 
         for i_key in incomes:
-            item_quantity, name, emoji = incomes[i_key]
+            pos_item_quantity, neg_item_quantity, name, emoji = incomes[i_key]
+            item_quantity = pos_item_quantity + neg_item_quantity
             if item_quantity > 0:  # Assign an emoji indicator to income/cost
                 desc += f'<:small_triangle_up:1260292468704809071> {emoji} `{round(item_quantity, 1)}` {name}\n'
             elif item_quantity == 0:
@@ -630,7 +652,14 @@ def get_buildings_income_description(buildings: dict):
 
 def get_item_income_description(hunger_income: dict):
     def makeline(desc: str, item_id: int):
-        item_quantity, name, emoji = hunger_income[item_id].values()
+        pos_item_quantity, neg_item_quantity, name, emoji = hunger_income[item_id].values()
+        print(hunger_income[item_id].values())
+        print(pos_item_quantity)
+        print(type(pos_item_quantity))
+        print(neg_item_quantity)
+        print(type(neg_item_quantity))
+
+        item_quantity = pos_item_quantity + neg_item_quantity
 
         if item_quantity > 0:  # Assign an emoji indicator to income/cost
             desc += f'<:small_triangle_up:1260292468704809071> {emoji} `{round(item_quantity, 1)}` {name}\n'
@@ -1043,14 +1072,17 @@ async def build_province_embed(self, province_id: int, country_id: int, all_prov
     fields = [f1, f2, f0, f3, f4, f5, f6]
 
     # Get economy info
-    if not 3 in all_province_incomes['hunger_incomes'][province_id].buildings_incomes:  # If no food
+    if 3 not in all_province_incomes['hunger_incomes'][province_id].buildings_incomes:  # If no food
         all_province_incomes['hunger_incomes'][province_id].buildings_incomes[3] = \
-            {'quantity': 0, 'name': 'Żywność', 'emoji': '<:Zywnosc:1259245985272561815>'}
-    if not 2 in all_province_incomes['hunger_incomes'][province_id].buildings_incomes:  # If no gold income
+            {'neg_quantity': 0, 'pos_quantity': 0, 'name': 'Żywność', 'emoji': '<:Zywnosc:1259245985272561815>'}
+    if 2 not in all_province_incomes['hunger_incomes'][province_id].buildings_incomes:  # If no gold income
         all_province_incomes['hunger_incomes'][province_id].buildings_incomes[2] = \
-            {'quantity': 0, 'name': 'Talary', 'emoji': '<:Talary:1259245998698659850>'}
-    all_province_incomes['hunger_incomes'][province_id].buildings_incomes[3]['quantity'] -= pops  # Subtract eaten food
-    all_province_incomes['hunger_incomes'][province_id].buildings_incomes[2]['quantity'] += pops * configure['POP_TAX']
+            {'neg_quantity': 0, 'pos_quantity': 0, 'name': 'Talary', 'emoji': '<:Talary:1259245998698659850>'}
+    all_province_incomes['hunger_incomes'][province_id].buildings_incomes[3]['neg_quantity'] -= pops
+    # Subtract eaten food
+    all_province_incomes['hunger_incomes'][province_id].buildings_incomes[2]['pos_quantity'] += (pops
+                                                                                                 * configure['POP_TAX'])
+    # Add gold income from tax
 
     economy_description = get_item_income_description(
         all_province_incomes['hunger_incomes'][province_id].buildings_incomes)
@@ -1432,24 +1464,10 @@ def commands():
 
 
 # /info command
-def ic_tutorial():
-    f1 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/tutorial\u001b[0;0m```"
-                                       f"\nTalar nie będzie czekał!", inline=False)
-    embed = interactions.Embed(
-        title="/tutorial",
-        description="Wyświetla tutorial do gry Pax Zeonica.\n"
-                    "Dla przyjemnej gry zachęcamy zapoznać się z tutejszymi mechanikami i komendami.",
-        author=author,
-        fields=[f1]
-    )
-    return embed
-
-
 def ic_commands():
     f1 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/commands\u001b[0;0m```"
-                                       f"\nWyświetla ściągę komend.", inline=False)
+                                       f"Wyświetla ściągę komend.", inline=False)
     embed = interactions.Embed(
         title="/commands",
         description="Wyświetla ściągę wszystkich komend na serwerze Pax Zeonica.",
@@ -1460,14 +1478,14 @@ def ic_commands():
 
 
 def ic_info_command():
-    f1 = interactions.EmbedField(name="[komenda]", value=f"```ansi"
+    f1 = interactions.EmbedField(name="[nazwa_komendy]", value=f"```ansi"
                                                          f"\n\u001b[0;31m•Nazwa Komendy\u001b[0;0m"
                                                          f"\nWyświetla informacje danej komendy.```", inline=True)
     f2 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/info command [/info command]\u001b[0;0m```"
-                                       f"\nWyświetla stronę na której się właśnie znajdujesz.", inline=False)
+                                       f"Wyświetla stronę na której się właśnie znajdujesz.", inline=False)
     embed = interactions.Embed(
-        title="/info command [komenda]",
+        title="/info command [nazwa_komendy]",
         description="Wyświetla dokładne informacje dotyczące danej komendy.\n"
                     "Właśnie jej używasz żeby sprawdzić informacje o komendzie '/info command'.",
         author=author,
@@ -1477,18 +1495,18 @@ def ic_info_command():
 
 
 def ic_info_country():
-    f1 = interactions.EmbedField(name="[kraj]", value=f"```ansi"
+    f1 = interactions.EmbedField(name="(kraj)", value=f"```ansi"
                                                       f"\n\u001b[0;31m•@ gracza\u001b[0;0m"
                                                       f"\nWyświetla informacje o kraju danego gracza."
                                                       f"\n\u001b[0;31m•Nazwa Kraju\u001b[0;0m"
                                                       f"\nWyświetla informacje o danym kraju.```", inline=True)
     f2 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/info country [@XnraD]\u001b[0;0m```"
-                                       f"\nWyświetla informacje o kraju XnraD'a (Karbadia)."
-                                       f"```ansi\n\u001b[0;40m/info country [Karbadia]\u001b[0;0m```"
-                                       f"\nWyświetla informacje o kraju Karbadia.", inline=False)
+                                 value=f"```ansi\n\u001b[0;40m/info country (@XnraD)\u001b[0;0m```"
+                                       f"Wyświetla informacje o kraju XnraD'a (Karbadia)."
+                                       f"```ansi\n\u001b[0;40m/info country (Karbadia)\u001b[0;0m```"
+                                       f"Wyświetla informacje o kraju Karbadia.", inline=False)
     embed = interactions.Embed(
-        title="/info country [kraj]",
+        title="/info country (kraj)",
         description="Wyświetla informacje dotyczące danego kraju.",
         author=author,
         fields=[f1, f2]
@@ -1502,8 +1520,10 @@ def ic_map():
                                                       f"\n321 kolorowych prowincji."
                                                       f"\n\u001b[0;31m•Regionów\u001b[0;0m"
                                                       f"\n30 regionów zeonici."
+                                                      f"\n\u001b[0;31m•Terenów\u001b[0;0m"
+                                                      f"\n11 typów terenów."
                                                       f"\n\u001b[0;31m•Zasobów\u001b[0;0m"
-                                                      f"\n29 różnych zasobów."
+                                                      f"\n30 różnych typów zasobów."
                                                       f"\n\u001b[0;31m•Polityczna\u001b[0;0m"
                                                       f"\nWasze świetne państwa."
                                                       f"\n\u001b[0;31m•Religii\u001b[0;0m"
@@ -1535,9 +1555,9 @@ def ic_map():
                                                        f"\nPokazuje wszystkie możliwe informacje.```", inline=True)
     f5 = interactions.EmbedField(name="Przykłady: ",
                                  value=f"```ansi\n\u001b[0;40m/mapa [Polityczna] [Nie] [Armie]\u001b[0;0m```"
-                                       f"\nGeneruje mapę z państwami graczy i armiami."
+                                       f"Generuje mapę z państwami graczy i armiami."
                                        f"```ansi\n\u001b[0;40m/mapa [Prowincji] [Tak] [ID Prowincji]\u001b[0;0m```"
-                                       f"\nGeneruje mapę prowincji, konturami i ID prowincji.", inline=False)
+                                       f"Generuje mapę prowincji, konturami i ID prowincji.", inline=False)
 
     embed = interactions.Embed(
         title="/map [mapa] [kontury] [adnotacje] {admin}",
@@ -1565,9 +1585,9 @@ def ic_inventory_list():
                                                        f"\nWyświetla inventory danego kraju.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/inventory list [Dokładny]\u001b[0;0m```"
-                                       f"\nWyświela ekwipunek w postaci stron."
+                                       f"Wyświela ekwipunek w postaci stron."
                                        f"```ansi\n\u001b[0;40m/inventory list [Prosty]\u001b[0;0m```"
-                                       f"\nWyświela ekwipunek w postaci listy.", inline=False)
+                                       f"Wyświela ekwipunek w postaci listy.", inline=False)
     embed = interactions.Embed(
         title="/inventory list [tryb] {admin}",
         description="Wyświetla ilość itemów które posiada państwo gracza oraz ich balans.\n"
@@ -1591,7 +1611,7 @@ def ic_inventory_item():
                                                        f"\nWyświetla itemy danego kraju.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/inventory item [Talary]\u001b[0;0m```"
-                                       f"\nWyświetla informacje o talarach w kraju.", inline=False)
+                                       f"Wyświetla informacje o talarach w kraju.", inline=False)
     embed = interactions.Embed(
         title="/inventory item [item] {admin}",
         description="Wyświetla informacje o itemach.",
@@ -1615,10 +1635,10 @@ def ic_inventory_give():
                                                        f"\nPozwala na spawnowanie itemów.```", inline=True)
     f4 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/inventory give [@XnraD] [10 Talary]\u001b[0;0m```"
-                                       f"\nDaje państwu XnraD'a (Karbadia) 10 talarów."
+                                       f"Daje państwu XnraD'a (Karbadia) 10 talarów."
                                        f"```ansi\n\u001b[0;40m/inventory give [Karbadia] [15 Drewno,"
                                        f" 20 Kamień]\u001b[0;0m```"
-                                       f"\nDaje państwu Karbadia 15 drewna i 20 kamienia.", inline=False)
+                                       f"Daje państwu Karbadia 15 drewna i 20 kamienia.", inline=False)
     embed = interactions.Embed(
         title="/inventory give [kraj] [argument] {admin}",
         description="Daje innemu krajowi itemy z twojego inventory.\n"
@@ -1644,9 +1664,9 @@ def ic_army_list():
                                                        f"\nWyświetla armie danego kraju.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/army list [Dokładny]\u001b[0;0m```"
-                                       f"\nWyświela armie w postaci stron."
+                                       f"Wyświela armie w postaci stron."
                                        f"```ansi\n\u001b[0;40m/army list [Prosty]\u001b[0;0m```"
-                                       f"\nWyświela armie w postaci listy.", inline=False)
+                                       f"Wyświela armie w postaci listy.", inline=False)
     embed = interactions.Embed(
         title="/army list [tryb] {admin}",
         description="Wyświetla powołane armie które posiada państwo gracza.\n"
@@ -1670,9 +1690,9 @@ def ic_army_templates():
                                                        f"\nWyświetla szablony jednostek danego kraju.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/army templates (Wojownicy)\u001b[0;0m```"
-                                       f"\nWyświela informacje o szablonie jednostki 'Wojownicy'."
+                                       f"Wyświela informacje o szablonie jednostki 'Wojownicy'."
                                        f"```ansi\n\u001b[0;40m/building templates (Tartak)\u001b[0;0m```"
-                                       f"\nWyświela informacje o szablonie budynku 'Tartak'.", inline=False)
+                                       f"Wyświela informacje o szablonie budynku 'Tartak'.", inline=False)
     embed = interactions.Embed(
         title="/army templates (jednostka) {admin}",
         description="Wyświetla informacje o szablonach jednostek państwa gracza.",
@@ -1705,13 +1725,13 @@ def ic_army_recruit():
                                                        f"\nSpawnuje jednostkę danemu krajowi.```", inline=True)
     f6 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/army recruit [#53] [Wojownicy]\u001b[0;0m```"
-                                       f"\nRekrutuje w prowincji #53 jednostkę Wojowników i nadaje im automatycznie"
+                                       f"Rekrutuje w prowincji #53 jednostkę Wojowników i nadaje im automatycznie"
                                        f"wygenerowaną nazwę jednostki oraz armii."
                                        f"\nOdejmuje potrzebną ilość populacji z prowincji #53."
                                        f"\nOdejmuje potrzebną ilość pozostałych itemów z inventory."
                                        f"```ansi\n\u001b[0;40m/army recruit [#53] [Wojownicy] (Gwardia Królewska) "
                                        f"(Pierwsza Chorągiew)\u001b[0;0m```"
-                                       f"\nTo samo co wyżej, ale na dodatek ustawia nazwę jednostki oraz nazwę armii co"
+                                       f"To samo co wyżej, ale na dodatek ustawia nazwę jednostki oraz nazwę armii co"
                                        f" ułatwia jej przyszłe zarządzanie i dodaje nam rigczu na polu bitwy.",
                                  inline=False)
     embed = interactions.Embed(
@@ -1745,11 +1765,11 @@ def ic_army_disband():
                                                        f"\nUsuwa jednostkę lub armię danemu krajowi.```", inline=True)
     f4 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/army disband [Armia] [Pierwsza Chorągiew]\u001b[0;0m```"
-                                       f"\nRozwiązuje całą armię."
+                                       f"Rozwiązuje całą armię."
                                        f"\nZwraca część kosztów rekrutacyjnych oraz żywych żołnierzy do "
                                        f"prowincji ich pochodzenia."
                                        f"```ansi\n\u001b[0;40m/army disband [Jednostka] [#12, #13]\u001b[0;0m```"
-                                       f"\nTo samo co wyżej, ale kilka jednostek na raz i po ID.",
+                                       f"To samo co wyżej, ale kilka jednostek na raz i po ID.",
                                  inline=False)
     embed = interactions.Embed(
         title="/army disband [typ] [nazwa] {admin}",
@@ -1782,13 +1802,13 @@ def ic_army_reorg():
                                                        f"\nReorganizuje armię danemu krajowi.```", inline=True)
     f4 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/army reorg [#53]\u001b[0;0m```"
-                                       f"\nWyświela informacje o organizacji armii w prowincji #53."
+                                       f"Wyświela informacje o organizacji armii w prowincji #53."
                                        "```ansi\n\u001b[0;40m/army reorg [#53] ({#1: +#13, +#12})\u001b[0;0m```"
-                                       f"\nPrzenosi jednostki o #13 i #12 do armii #1."
+                                       f"Przenosi jednostki o #13 i #12 do armii #1."
                                        "```ansi\n\u001b[0;40m/army reorg [#53] ({+: +#13, +#12})\u001b[0;0m```"
-                                       f"\nTworzy nową armię o kolejnym wolnym ID i dodaje do niej jednostki #13 i #12."
+                                       f"Tworzy nową armię o kolejnym wolnym ID i dodaje do niej jednostki #13 i #12."
                                        "```ansi\n\u001b[0;40m/army reorg [#53] ({#1: -#13}, {#3; +#12})\u001b[0;0m```"
-                                       f"\nUsuwa jednostkę #13 z armii #1 i tworzy dla niej nową armię o kolejnym "
+                                       f"Usuwa jednostkę #13 z armii #1 i tworzy dla niej nową armię o kolejnym "
                                        f"wolnym ID. Równocześnie dodaje jednostkę #12 do armii #3.",
                                  inline=False)
     embed = interactions.Embed(
@@ -1824,12 +1844,12 @@ def ic_army_reinforce():
     f4 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/army resupply [Jednostka] [Gwardia Królewska]"
                                        f"[Gwardia Królewska]\u001b[0;0m```"
-                                       f"\nPrzywraca jednostkę 'Gwardia Królewska' do pełni sił."
+                                       f"Przywraca jednostkę 'Gwardia Królewska' do pełni sił."
                                        f"\nGdyby przedtem miała tylko 75% stanu osobowego z powodu bitew lub innych "
                                        f"powodów, teraz wróciła by do 100% sił."
-                                       f"\nOdejęte zostanie również 25% bazowego kosztu jednostki z inventory kraju."
+                                       f"Odejęte zostanie również 25% bazowego kosztu jednostki z inventory kraju."
                                        f"```ansi\n\u001b[0;40m/army resupply [Armia] [#1, #2]\u001b[0;0m```"
-                                       f"\nTo samo co wyżej, ale kilka armii na raz.",
+                                       f"To samo co wyżej, ale kilka armii na raz.",
                                  inline=False)
     embed = interactions.Embed(
         title="/army reinforce [typ] [jednostka] {admin}",
@@ -1866,10 +1886,10 @@ def ic_army_rename():
     f5 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/army rename [Armia] [Pierwsza Chorągiew] "
                                        f"[Chorągiew Cara] \u001b[0;0m```"
-                                       f"\nZmienia nazwę armii 'Pierwsza Chorągiew' na 'Chorągiew Cara'."
+                                       f"Zmienia nazwę armii 'Pierwsza Chorągiew' na 'Chorągiew Cara'."
                                        f"```ansi\n\u001b[0;40m/army rename [Jednostka] [#13] "
                                        f"[Gwardia Cara] \u001b[0;0m```"
-                                       f"\nZmienia nazwę jednostki #13 na 'Gwardia Cara'.",
+                                       f"Zmienia nazwę jednostki #13 na 'Gwardia Cara'.",
                                  inline=False)
     embed = interactions.Embed(
         title="/army rename [typ] [nazwa] [nowa_nazwa] {admin}",
@@ -1897,11 +1917,11 @@ def ic_army_move():
                                                        f"\nTeleportuje armię.```", inline=True)
     f4 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/army move [#1] [#50]\u001b[0;0m```"
-                                       f"\nDodaje rozkaz ruchu dla armii o ID #1 z graniczącej prowincji do "
+                                       f"Dodaje rozkaz ruchu dla armii o ID #1 z graniczącej prowincji do "
                                        f"prowincji o ID #50."
                                        f"```ansi\n\u001b[0;40m/army move [Pierwsza Chorągiew] "
                                        f"[Kanonia]\u001b[0;0m```"
-                                       f"\nDodaje rozkaz ruchu dla armii o nazwie 'Pierwsza Chorągiew' z graniczącej "
+                                       f"Dodaje rozkaz ruchu dla armii o nazwie 'Pierwsza Chorągiew' z graniczącej "
                                        f"prowincji do prowincji o nazwie 'Kanonia'.", inline=False)
     embed = interactions.Embed(
         title="/army move [armia] [granica] {admin}",
@@ -1927,7 +1947,7 @@ def ic_army_orders():
                                                        f"\nWyświetla budynki danego kraju.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/army orders [move]\u001b[0;0m```"
-                                       f"\nWyświetla rozkazy ruchu armii w formie listy.", inline=False)
+                                       f"Wyświetla rozkazy ruchu armii w formie listy.", inline=False)
     embed = interactions.Embed(
         title="/army orders [typ] {admin}",
         description="Wyświetla informacje o rozkazach.",
@@ -1952,9 +1972,9 @@ def ic_building_list():
                                                        f"\nWyświetla budynki danego kraju.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/building list [Dokładny]\u001b[0;0m```"
-                                       f"\nWyświela budynki w postaci stron."
+                                       f"Wyświela budynki w postaci stron."
                                        f"```ansi\n\u001b[0;40m/building list [Prosty]\u001b[0;0m```"
-                                       f"\nWyświela budynki w postaci listy.", inline=False)
+                                       f"Wyświela budynki w postaci listy.", inline=False)
     embed = interactions.Embed(
         title="/building list [tryb] {admin}",
         description="Wyświetla zbudowane budynki które posiada państwo gracza.\n"
@@ -1967,8 +1987,10 @@ def ic_building_list():
 
 def ic_building_templates():
     f1 = interactions.EmbedField(name="(budynek)", value=f"```ansi"
-                                                         f"\n\u001b[0;31m•Szablon budynku\u001b[0;0m"
-                                                         f"\nWyświetla szablon danego budynku.```", inline=True)
+                                                         f"\n\u001b[0;31m•Dokładny\u001b[0;0m"
+                                                         f"\nInformacje w postaci szczegółowych stron."
+                                                         f"\n\u001b[0;31m•Prosty\u001b[0;0m"
+                                                         f"\nInformacje w postaci prostej listy.```", inline=True)
     f2 = interactions.EmbedField(name="{admin}", value=f"```ansi\n"
                                                        f"\n\u001b[0;35m•admin\u001b[0;0m"
                                                        f"\nWyświetla wszystkie szablony budynków."
@@ -1977,10 +1999,10 @@ def ic_building_templates():
                                                        f"\n\u001b[0;35m•Nazwa Kraju\u001b[0;0m"
                                                        f"\nWyświetla szablony budynków danego kraju.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/building templates\u001b[0;0m```"
-                                       f"\nWyświela listę wszystkich szablonów dostępnych dla twojego państwa."
-                                       f"```ansi\n\u001b[0;40m/building templates (Tartak)\u001b[0;0m```"
-                                       f"\nWyświela informacje o szablonie budynku 'Tartak'.", inline=False)
+                                 value=f"```ansi\n\u001b[0;40m/building templates [Dokładny]\u001b[0;0m```"
+                                       f"Wyświela szablony budynków w postaci stron."
+                                       f"```ansi\n\u001b[0;40m/building templates [Prosty]\u001b[0;0m```"
+                                       f"Wyświela szablony budynków w postaci listy.", inline=False)
     embed = interactions.Embed(
         title="/building templates (budynek) {admin}",
         description="Wyświetla informacje o szablonach budynków państwa gracza.",
@@ -2005,11 +2027,12 @@ def ic_building_build():
                                                        f"\nPozwala na spawnowanie budynków```", inline=True)
     f4 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/building build [#53] [Tartak]\u001b[0;0m```"
-                                       f"\nBuduje w prowincji #50 1 Tartak."
+                                       f"Buduje w prowincji #50 1 Tartak."
                                        f"\nW prowincji #53 zaczyna pracować dana ilość populacji."
                                        f"\nOdejmuje potrzebną ilość pozostałych itemów z inventory."
-                                       f"```ansi\n\u001b[0;40m/building build [Kanonia] [1 Tartak, 2 Kopalnia]\u001b[0;0m```"
-                                       f"\nBuduje w prowincji Kanonia 1 Tartak i 2 Kopalnie.",
+                                       f"```ansi\n\u001b[0;40m/building build [Kanonia] "
+                                       f"[1 Tartak, 2 Kopalnia]\u001b[0;0m```"
+                                       f"Buduje w prowincji Kanonia 1 Tartak i 2 Kopalnie.",
                                  inline=False)
     embed = interactions.Embed(
         title="/building build [prowincja] [budynek] {admin}",
@@ -2023,25 +2046,33 @@ def ic_building_build():
 
 def ic_building_destroy():
     f1 = interactions.EmbedField(name="[budynek]", value=f"```ansi"
-                                                         f"\n\u001b[0;31m•# budynku\u001b[0;0m"
-                                                         f"\nNiszczy budynek o danym ID.```",
+                                                         f"\n\u001b[0;31m•Szablon budynku\u001b[0;0m"
+                                                         f"\nNiszczy taki budynek w danej prowincji.```",
                                  inline=True)
-    f2 = interactions.EmbedField(name="{admin}", value=f"```ansi"
+    f2 = interactions.EmbedField(name="[prowincja]", value=f"```ansi"
+                                                           f"\n\u001b[0;31m•# prowincji\u001b[0;0m"
+                                                           f"\nW prowincji o tym ID będzie zniszczony budynek."
+                                                           f"\n\u001b[0;31m•Nazwa prowincji\u001b[0;0m"
+                                                           f"\nW prowincji o tej nazwie będzie zniszczony budynek.```",
+                                 inline=False)
+    f3 = interactions.EmbedField(name="{admin}", value=f"```ansi"
                                                        f"\n\u001b[0;35m•True\u001b[0;0m"
-                                                       f"\nPozwala na usuwanie budynków```", inline=True)
-    f3 = interactions.EmbedField(name="Przykłady:",
-                                 value=f"```ansi\n\u001b[0;40m/building destroy [#27]\u001b[0;0m```"
-                                       f"\nNiszczy budynek #27."
-                                       f"\nZwraca część kosztów oraz zwalnia robotników."
-                                       f"```ansi\n\u001b[0;40m/building destroy [#27, #37]\u001b[0;0m```"
-                                       f"\nTo samo co wyżej, ale kilka budynków na raz.",
+                                                       f"\nPozwala na kasowanie budynków```", inline=True)
+    f4 = interactions.EmbedField(name="Przykłady:",
+                                 value=f"```ansi\n\u001b[0;40m/building destroy [#50] [Tartak]\u001b[0;0m```"
+                                       f"Niszczy w prowincji #50 1 Tartak."
+                                       f"\nPopulacja pracująca w tym budynku zostaje zwolniona."
+                                       f"\nZwraca połowę kosztów w postaci surowców."
+                                       f"```ansi\n\u001b[0;40m/building build [Kanonia] "
+                                       f"[1 Tartak, 2 Kopalnia]\u001b[0;0m```"
+                                       f"To samo co wyżej, ale kilka budynków na raz.",
                                  inline=False)
     embed = interactions.Embed(
         title="/building destroy [budynek] {admin}",
         description="Niszczy dany budynek zwracając część surowców do inventory oraz zwalniając robotników.\n"
                     "Możesz zniszczyć tylko budynki które posiadasz oraz kontrolujesz.",
         author=author,
-        fields=[f1, f2, f3]
+        fields=[f1, f3, f2, f4]
     )
     return embed
 
@@ -2059,9 +2090,9 @@ def ic_province_list():
                                                        f"\nWyświetla prowincje danego kraju.```", inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/province list [Dokładny]\u001b[0;0m```"
-                                       f"\nWyświela prowincje w postaci stron."
+                                       f"Wyświela prowincje w postaci stron."
                                        f"```ansi\n\u001b[0;40m/province list [Prosty]\u001b[0;0m```"
-                                       f"\nWyświela prowincje w postaci listy.", inline=False)
+                                       f"Wyświela prowincje w postaci listy.", inline=False)
     embed = interactions.Embed(
         title="/province list [tryb] {admin}",
         description="Wyświetla prowincje które posiada kraj.\n"
@@ -2085,9 +2116,9 @@ def ic_province_rename():
                                  inline=True)
     f3 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/province rename [Kanonia] [Skalla] \u001b[0;0m```"
-                                       f"\nZmienia nazwę prowincji 'Kanonia' na 'Skalla'."
+                                       f"Zmienia nazwę prowincji 'Kanonia' na 'Skalla'."
                                        f"```ansi\n\u001b[0;40m/province rename [#53] [Skalla] \u001b[0;0m```"
-                                       f"\nZmienia nazwę prowincji #53 na 'Skalla'.",
+                                       f"Zmienia nazwę prowincji #53 na 'Skalla'.",
                                  inline=False)
     embed = interactions.Embed(
         title="/province rename [nazwa] [nowa_nazwa]",
@@ -2205,7 +2236,7 @@ FROM
                   countries 
                 WHERE
                   country_id = {country_id};
-                ''')).fetchone()[0]
+                ''')).fetchone()[0]  # 'FFFFFF'
 
     author = await country_author(self, country_id=country_id)
     footer = interactions.EmbedFooter(text=
@@ -2251,7 +2282,7 @@ async def b_building_list(self, country_id):
 
     incomes = {}
     # print(province_ids)
-    incomes = get_provinces_income()
+    incomes = get_provinces_incomes()
 
     province_incomes = {}
     for province_id in province_ids:
@@ -2272,6 +2303,107 @@ async def b_building_list(self, country_id):
         embeds.append(interactions.Embed(
             title="Lista budynków",
             description=bit,
+            author=author,
+            footer=footer,
+            color=int(country_color, 16)
+        ))
+    return embeds
+
+
+async def b_inventory_list(self, country_id):
+    def makeline(building_mess: str, item: list):
+        item_id, quantity, item_name, item_desc, item_emoji = item
+        if item_id not in country_income.buildings_incomes:
+            pos_quantity, neg_quantity = 0, 0
+        else:
+            pos_quantity = country_income.buildings_incomes[item_id]['pos_quantity']
+            neg_quantity = country_income.buildings_incomes[item_id]['neg_quantity']
+            neg_quantity = abs(neg_quantity)
+        balance = pos_quantity - neg_quantity
+        if (quantity == 0) & (balance == 0):
+            return building_mess
+
+        line = f'{item_emoji} **{item_name} x{quantity}**'
+
+        if (pos_quantity == 0) & (neg_quantity == 0):
+            return building_mess + line + '\n'
+
+        if balance > 0:  # Assign an emoji indicator to income/cost
+            line += f' <:small_triangle_up:1260292468704809071> `{round(balance, 1)} (+{pos_quantity}/-{neg_quantity})`'
+        elif balance == 0:
+            line += f' :small_orange_diamond: `{round(balance, 1)} (+{pos_quantity}/-{neg_quantity})`'
+        else:
+            line += (f' <:small_triangle_down:1260292467044122636> '
+                              f'`{round(balance, 1)} (+{pos_quantity}/-{neg_quantity})`')
+            if quantity < abs(balance):
+                line += f' :exclamation: __*{round(quantity / balance)}% popytu*__'
+
+        return building_mess + line + '\n'
+
+    connection = db.pax_engine.connect()
+
+    # Get the country inventory
+    inventory = connection.execute(
+        text(f'''
+            SELECT 
+              inv.item_id, inv.quantity, i.item_name, i.item_desc, i.item_emoji 
+            FROM 
+              inventories inv NATURAL
+              JOIN items i 
+            WHERE 
+              country_id={country_id}
+            ORDER BY
+              i.item_type
+            ''')).fetchall()
+    # +---------+----------+-----------+-----------------------+------------------------------------------+
+    # | item_id | quantity | item_name | item_desc             | item_emoji                               |
+    # +---------+----------+-----------+-----------------------+------------------------------------------+
+    # |       1 |     1.00 | Talar     | Niezły z niego gość   | <:Talar:1259251488585416765>             |
+    # |       2 |     1.00 | Talary    | Uniwersalna waluta, w | <:Talary:1259245998698659850>            |
+    # |       3 |     0.00 | Żywność   | Zaopatrzenie złożone z| <:Zywnosc:1259245985272561815>           |
+
+    # Get all incomes
+    provinces_incomes = get_provinces_incomes()
+    country_provinces = {}
+    for province_id in provinces_incomes:
+        if provinces_incomes[province_id].controller_id == country_id:
+            country_provinces[province_id] = provinces_incomes[province_id]
+    country_income = sum_item_incomes(country_provinces)
+    print(country_income.buildings_incomes)
+    if 3 not in country_income.buildings_incomes:
+        country_income.buildings_incomes[3] = \
+            {'neg_quantity': 0, 'pos_quantity': 0, 'name': 'Żywność', 'emoji': '<:Zywnosc:1259245985272561815>'}
+    if 2 not in country_income.buildings_incomes:
+        country_income.buildings_incomes[2] = \
+            {'neg_quantity': 0, 'pos_quantity': 0, 'name': 'Talary', 'emoji': '<:Talary:1259245998698659850>'}
+    country_income.buildings_incomes[3]['neg_quantity'] -= country_income.pops
+    country_income.buildings_incomes[2]['pos_quantity'] += round(country_income.pops * configure['POP_TAX'], 1)
+
+    item_message = ''
+    for item in inventory:
+        item_message = makeline(item_message, item)
+
+    pages = pagify(dataframe=item_message[:-1].split('\n'), max_char=3900)
+
+    country_color = connection.execute(
+        text(f'''
+                SELECT 
+                  country_color
+                FROM 
+                  countries 
+                WHERE
+                  country_id = {country_id};
+                ''')).fetchone()[0]
+    author = await country_author(self, country_id=country_id)
+    footer = interactions.EmbedFooter(text=
+                                      f"/inventory give [Karbadia] [20 Drewno, 300 Talary] | "
+                                      f"/inventory item [Drewno]")
+
+    embeds = []
+    for page in pages:
+        embeds.append(interactions.Embed(
+            title="Magazyny państwa",
+            description=page,
             author=author,
             footer=footer,
             color=int(country_color, 16)

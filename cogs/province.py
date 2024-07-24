@@ -76,10 +76,9 @@ class Province(interactions.Extension):
                 non_dup_ids.add(province_id[0])
             non_dup_ids = sorted(non_dup_ids)
 
-            province_incomes = {}
             summed_province_incomes = {}
 
-            province_incomes = models.get_provinces_income()
+            province_incomes = models.get_provinces_incomes()
             for province_id in non_dup_ids:
                 summed_province_incomes[province_id] = models.sum_item_incomes({province_id: province_incomes[province_id]})
             print(summed_province_incomes[50])

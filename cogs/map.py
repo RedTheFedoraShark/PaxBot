@@ -344,7 +344,7 @@ class Map(interactions.Extension):
                         author_id = db.pax_engine.connect().execute(text(
                             f"SELECT country_id FROM players WHERE player_id = {ctx.author.id}")).fetchone()
                         result = db.pax_engine.connect().execute(text(
-                            f"SELECT province_id FROM provinces WHERE country_id = {author_id[0]}")).fetchall()
+                            f"SELECT province_id FROM provinces WHERE controller_id = {author_id[0]}")).fetchall()
                         result1 = db.pax_engine.connect().execute(text(
                             f"SELECT province_id, army_vision_range FROM armies WHERE country_id = {author_id[0]}")).fetchall()
                         result2 = db.pax_engine.connect().execute(text(

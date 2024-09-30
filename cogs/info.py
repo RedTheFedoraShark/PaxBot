@@ -37,32 +37,31 @@ class Info(interactions.Extension):
                                    interactions.SlashCommandChoice(name="/map", value=3),
                                    # Inventory
                                    interactions.SlashCommandChoice(name="/inventory list", value=4),
-                                   interactions.SlashCommandChoice(name="/inventory item", value=5),
-                                   interactions.SlashCommandChoice(name="/inventory give", value=6),
+                                   interactions.SlashCommandChoice(name="/inventory give", value=5),
                                    # Army
-                                   interactions.SlashCommandChoice(name="/army list", value=7),
-                                   interactions.SlashCommandChoice(name="/army templates", value=8),
-                                   interactions.SlashCommandChoice(name="/army recruit", value=9),
-                                   interactions.SlashCommandChoice(name="/army disband", value=10),
-                                   interactions.SlashCommandChoice(name="/army reorg", value=11),
-                                   interactions.SlashCommandChoice(name="/army reinforce", value=12),
-                                   interactions.SlashCommandChoice(name="/army rename", value=13),
-                                   interactions.SlashCommandChoice(name="/army move", value=14),
-                                   interactions.SlashCommandChoice(name="/army orders", value=15),
+                                   interactions.SlashCommandChoice(name="/army list", value=6),
+                                   interactions.SlashCommandChoice(name="/army templates", value=7),
+                                   interactions.SlashCommandChoice(name="/army recruit", value=8),
+                                   interactions.SlashCommandChoice(name="/army disband", value=9),
+                                   interactions.SlashCommandChoice(name="/army reorg", value=10),
+                                   interactions.SlashCommandChoice(name="/army reinforce", value=11),
+                                   interactions.SlashCommandChoice(name="/army rename", value=12),
+                                   interactions.SlashCommandChoice(name="/army move", value=13),
+                                   interactions.SlashCommandChoice(name="/army orders", value=14),
                                    # Buildings
-                                   interactions.SlashCommandChoice(name="/building list", value=16),
-                                   interactions.SlashCommandChoice(name="/building templates", value=17),
-                                   interactions.SlashCommandChoice(name="/building build", value=18),
-                                   interactions.SlashCommandChoice(name="/building destroy", value=19),
+                                   interactions.SlashCommandChoice(name="/building list", value=15),
+                                   interactions.SlashCommandChoice(name="/building templates", value=16),
+                                   interactions.SlashCommandChoice(name="/building build", value=17),
+                                   interactions.SlashCommandChoice(name="/building destroy", value=18),
                                    # Provinces
-                                   interactions.SlashCommandChoice(name="/province list", value=20),
-                                   interactions.SlashCommandChoice(name="/province rename", value=21)]
+                                   interactions.SlashCommandChoice(name="/province list", value=19),
+                                   interactions.SlashCommandChoice(name="/province rename", value=20)]
                                )
     async def command(self, ctx: interactions.SlashContext, nazwa_komendy: int):
 
         command_name = nazwa_komendy
         raw = ('ic_commands', 'ic_info_command', 'ic_info_country', 'ic_map', 'ic_inventory_list',
-               'ic_inventory_item', 'ic_inventory_give', 'ic_army_list', 'ic_army_templates', 'ic_army_recruit',
+               'ic_inventory_give', 'ic_army_list', 'ic_army_templates', 'ic_army_recruit',
                'ic_army_disband', 'ic_army_reorg', 'ic_army_reinforce', 'ic_army_rename', 'ic_army_move',
                'ic_army_orders', 'ic_building_list', 'ic_building_templates', 'ic_building_build',
                'ic_building_destroy', 'ic_province_list', 'ic_province_rename')

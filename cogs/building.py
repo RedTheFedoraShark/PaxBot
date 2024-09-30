@@ -38,17 +38,32 @@ class Building(interactions.Extension):
             if admin == "admin":
                 country_id = '%'
             elif admin.startswith('<@') and admin.endswith('>'):  # if a ping
-                country_id = connection.execute(text(
+                q = connection.execute(text(
                     f'SELECT country_id FROM players NATURAL JOIN countries '
-                    f'WHERE player_id = {admin[2:-1]}')).fetchone()[0]
+                    f'WHERE player_id = {admin[2:-1]}')).fetchone()
+                if not q:
+                    await ctx.send(embed=interactions.Embed(description=f'Gracz **{admin}** nie ma państwa!'))
+                    connection.close()
+                    return
+                country_id = q[0]
             else:
-                country_id = connection.execute(text(
+                q = connection.execute(text(
                     f'SELECT country_id FROM players NATURAL JOIN countries WHERE country_name = "{admin}"'
-                )).fetchone()[0]
+                )).fetchone()
+                if not q:
+                    await ctx.send(embed=interactions.Embed(description=f'Państwo **{admin}** nie istnieje!'))
+                    connection.close()
+                    return
+                country_id = q[0]
         else:
-            country_id = connection.execute(text(
+            q = connection.execute(text(
                 f'SELECT country_id FROM countries NATURAL JOIN players WHERE player_id = "{ctx.author.id}"'
-            )).fetchone()[0]
+            )).fetchone()
+            if not q:
+                await ctx.send(embed=interactions.Embed(description=f'Nie masz przypisanego państwa!'))
+                connection.close()
+                return
+            country_id = q[0]
 
         pages = await models.b_building_list(self, country_id=country_id)
         for i, page in enumerate(pages):
@@ -139,7 +154,7 @@ class Building(interactions.Extension):
 
         if province.startswith('#'):
             query = connection.execute(text(
-                f'SELECT province_id, province_name FROM provinces WHERE province_id = "{province[1:]}"' #4000
+                f'SELECT province_id, province_name FROM provinces WHERE province_id = "{province[1:]}"'  # 4000
             )).fetchone()
             if query is None and not is_admin:
                 await ctx.send(embed=interactions.Embed(description=f'Nie istnieje prowincja o ID **{province}**!'))
@@ -180,25 +195,26 @@ class Building(interactions.Extension):
             return
 
         costs = {}
-        building = building.strip().split(',')  # ['2 Tartak', '2 Kopalnia']
+        building = building.strip().split(',')  # ['2 Tartak', '-2 Kopalnia', 'Warsztat']
 
         for b in building:
             print(b)
 
         for i, b in enumerate(building):
-            b = str(b).strip()
-            print(b[0])
-            if not str.isdigit(b[0]):
-                print('added')
-                b = '1 ' + b
-            building[i] = b.split()  # [['2', 'Tartak'], ['2', 'Kopalnia']]
-            print(building[i] is not list)
-            print(len(building[i]))
-            print(type(building[i]))
-            if building[i] is str or len(building[i]) < 2:
-                building[i].insert(0, '1')
-            if len(building[i]) != 2:
+            building[i] = building[i].strip().split()  # [['2', 'Tartak'], ['-2', 'Kopalnia'], ['Warsztat']]
+            if str.isdigit(building[i][0]):
+                building[i][0] = '+' + building[i][0]  # [['+2', 'Tartak'], ['-2', 'Kopalnia'], ['Warsztat']]
+            if len(building[i]) < 2:
+                building[i].insert(0, '+1') # [['+2', 'Tartak'], ['-2', 'Kopalnia'], ['+1', 'Warsztat']]
+
+            if len(building[i]) != 2 or not (building[i][0][0] in ['+', '-', '=']) or not str.isdigit(building[i][0][1:]):
                 await ctx.send(embed=interactions.Embed(description=f'Argument ma złą składnię! **{building[i]}**!'))
+                connection.close()
+                return
+
+            if building[i][0][0] in ['-', '='] and not is_admin:
+                await ctx.send(embed=interactions.Embed(
+                    description='Nie posiadasz uprawnień, by odbierać lub ustawiać wartości w ekwipunku!'))
                 connection.close()
                 return
 
@@ -227,14 +243,17 @@ class Building(interactions.Extension):
                 connection.close()
                 return
 
-            building[i].append(query[0][2])  # [['1', 'Tartak', ':tartak:], ['2', 'Kopalnia', ':kopalnia:]]
-            building[i].append(query[0][3])  # [['1', 'Tartak', ':tartak:, 1], ['2', 'Kopalnia', ':kopalnia:, 3]]
+            building[i].append(query[0][2])  # [['+1', 'Tartak', ':tartak:], ['-2', 'Kopalnia', ':kopalnia:]]
+            building[i].append(query[0][3])  # [['+1', 'Tartak', ':tartak:, 1], ['-2', 'Kopalnia', ':kopalnia:, 3]]
 
             for cost in query:
+                if building[i][0][0] in ['-', '=']:
+                    continue
+                amount = int(building[i][0][1:])
                 if cost[4] not in costs:
-                    costs[cost[4]] = cost[5] * int(building[i][0])  # "2": 200
+                    costs[cost[4]] = cost[5] * amount  # "2": 200
                 else:
-                    costs[cost[4]] += cost[5] * int(building[i][0])  # "2": 400
+                    costs[cost[4]] += cost[5] * amount  # "2": 400
             print(building[i][1])
             print(query)
 
@@ -246,24 +265,54 @@ class Building(interactions.Extension):
                 print(b[0])
                 print(type(b[0]))
                 spawned_buildings = spawned_buildings + f', {b[0]} {b[2]} **{b[1]}**'
-                connection.execute(text(
-                    f"""
-                    INSERT INTO structures (
-                      province_id, building_id, quantity
-                    ) 
-                    VALUES 
-                      ({province_id}, {b[3]}, {int(b[0])}) ON DUPLICATE KEY 
-                    UPDATE 
-                      quantity = quantity + {int(b[0])}
-                    """
-                ))
+                match b[0][0]:  # Check the sign
+                    case '+':
+                        connection.execute(text(
+                            f"""
+                            INSERT INTO structures (
+                              province_id, building_id, quantity
+                            ) 
+                            VALUES 
+                              ({province_id}, {b[3]}, {int(b[0][1:])}) ON DUPLICATE KEY 
+                            UPDATE 
+                              quantity = quantity + {int(b[0][1:])}
+                            """
+                        ))
+                    case '-':
+                        connection.execute(text(
+                            f"""
+                            INSERT INTO structures (
+                              province_id, building_id, quantity
+                            ) 
+                            VALUES 
+                              ({province_id}, {b[3]}, {int(b[0][1:])}) ON DUPLICATE KEY 
+                            UPDATE 
+                              quantity = quantity - {int(b[0][1:])}
+                            """
+                        ))
+                    case '=':
+                        connection.execute(text(
+                            f"""
+                            INSERT INTO structures (
+                              province_id, building_id, quantity
+                            ) 
+                            VALUES 
+                              ({province_id}, {b[3]}, {int(b[0][1:])}) ON DUPLICATE KEY 
+                            UPDATE 
+                              quantity = {int(b[0][1:])}
+                            """
+                        ))
             connection.commit()
             print(spawned_buildings)
             await ctx.send(embeds=interactions.Embed(
-                title=f'Zespawnowano budynki w prowincji **{province_name} (#{province_id})!**',
+                title=f'Zedytowano budynki w prowincji **{province_name} (#{province_id})!**',
                 description=f'{spawned_buildings[2:]}'))
             connection.close()
             return
+
+        # Now there are no '-' or '=' so we can remove the '+'
+        for i, b in enumerate(building):
+            building[i][0] = building[i][0][1:]
 
         if (number_of_buildings + sum(
                 [int(i) for i in list(zip(*building))[0]])) > max_buildings:  # buildings + new_buildings > max

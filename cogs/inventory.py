@@ -23,7 +23,8 @@ class Inventory(interactions.Extension):
         return
 
     @inventory.subcommand(sub_cmd_name="list")
-    @interactions.slash_option(name='tryb', description='W jakim trybie wyświetlić informacje? (NIE DZIAŁA - ZAWSZE PROSTY)',
+    @interactions.slash_option(name='tryb',
+                               description='W jakim trybie wyświetlić informacje? (NIE DZIAŁA - ZAWSZE PROSTY)',
                                opt_type=interactions.OptionType.STRING, required=True,
                                choices=[interactions.SlashCommandChoice(name="Dokładny", value="pages"),
                                         interactions.SlashCommandChoice(name="Prosty", value="list")])
@@ -73,87 +74,37 @@ class Inventory(interactions.Extension):
         connection.close()
         return
 
-    @inventory.subcommand(sub_cmd_name="item")
-    @interactions.slash_option(name='item', description='O jakim itemie wyświetlić informacje?',
-                               opt_type=interactions.OptionType.STRING, required=True, autocomplete=True)
-    @interactions.slash_option(name='admin', description='Admin?',
-                               opt_type=interactions.OptionType.BOOLEAN)
-    async def item(self, ctx: interactions.SlashContext, item: str, admin: bool = False):
-        country_id = db.pax_engine.connect().execute(text(
-            f'SELECT country_id FROM players NATURAL JOIN countries WHERE player_id = {ctx.author.id}')).fetchone()
-
-        if admin and ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
-            is_admin = True
-            query = db.pax_engine.connect().execute(text(f'SELECT item_id, item_name FROM items')).fetchall()
-        else:
-            is_admin = False
-            query = db.pax_engine.connect().execute(text(
-                f'SELECT item_id, item_name FROM countries NATURAL JOIN inventories NATURAL JOIN items '
-                f'WHERE country_id = {country_id[0]} AND NOT quantity <= 0')).fetchall()
-
-        index = 0
-        for i, row in enumerate(query):
-            if str.lower(row[1]) == str.lower(item):
-                index = i
-        single_list = []
-        for row in query:
-            single_list.append(row[0])
-
-        if is_admin:
-            pages = []
-            for item_id in single_list:
-                embed = await models.build_item_embed_admin(item_id)
-                pages.append(embed)
-
-            paginator = Paginator.create_from_embeds(ctx.client, *pages)
-            paginator.page_index = index
-            await paginator.send(ctx=ctx)
-        else:
-            match len(single_list):
-                case 0:
-                    await ctx.send("Nie masz nic w ekwipunku!")
-                case 1:
-                    embed = await models.build_item_embed(ctx, self, single_list[0], country_id[0])
-                    await ctx.send(embeds=embed)
-                case _:
-                    pages = []
-                    for item_id in single_list:
-                        embed = await models.build_item_embed(ctx, self, item_id, country_id[0])
-                        pages.append(embed)
-                    paginator = Paginator.create_from_embeds(ctx.client, *pages)
-                    paginator.page_index = index
-                    await paginator.send(ctx=ctx)
-
-    @item.autocomplete('item')
-    async def item_autocomplete(self, ctx: interactions.AutocompleteContext):
-        items = db.pax_engine.connect().execute(text(
-            f'SELECT item_name FROM players NATURAL JOIN countries NATURAL JOIN inventories NATURAL JOIN items '
-            f'WHERE player_id = "{ctx.author.id}" AND quantity > 0')).fetchall()
-        item = ctx.input_text
-        if item == "":
-            del items[24:]  # Make sure that at most 25 options are available at once
-            choices = [
-                interactions.SlashCommandChoice(name=item_name[0], value=item_name[0])
-                for item_name in items
-            ]
-        else:
-            choices = [
-                interactions.SlashCommandChoice(name=item_name[0], value=item_name[0])
-                for item_name in items if str.lower(item) in str.lower(item_name[0])
-            ]
-        await ctx.send(choices)
-
     @inventory.subcommand(sub_cmd_name="give")
-    @interactions.slash_option(name='country', description='Wpisz dokładną nazwę kraju lub zpinguj gracza.',
-                               opt_type=interactions.OptionType.STRING, required=True)
-    @interactions.slash_option(name='items', description='ilość nazwa_itemu1, ilość nazwa_itemu2',
+    @interactions.slash_option(name='kraj', description='Wpisz dokładną nazwę kraju lub zpinguj gracza do którego '
+                                                        'masz zasięg.',
+                               opt_type=interactions.OptionType.STRING, required=True, autocomplete=True)
+    @interactions.slash_option(name='itemy', description='ilość nazwa_itemu1, ilość nazwa_itemu2',
                                opt_type=interactions.OptionType.STRING, required=True)
     @interactions.slash_option(name='admin', description='Admin?',
                                opt_type=interactions.OptionType.BOOLEAN)
-    async def give(self, ctx: interactions.SlashContext, country: str, items: str, admin: bool = False):
+    async def give(self, ctx: interactions.SlashContext, kraj: str, itemy: str, admin: bool = False):
         await ctx.defer()
 
+        country = kraj
+        items = itemy
         connection = db.pax_engine.connect()
+
+        if country.startswith('<@') and country.endswith('>'):  # If a ping
+            q = connection.execute(text(
+                f'SELECT country_id FROM players WHERE player_id = {country[2:-1]};')).fetchone()
+            if q is None:
+                await ctx.send(embed=interactions.Embed(description=f'Gracz **{country}** nie ma państwa!'))
+                connection.close()
+                return
+            country = q[0]
+        else:
+            q = connection.execute(
+                text(f'SELECT country_id FROM countries WHERE LOWER(country_name) = LOWER("{country}");')).fetchone()
+            if q is None:
+                await ctx.send(embed=interactions.Embed(description=f'Państwo **{country}** nie istnieje!'))
+                connection.close()
+                return
+            country = q[0]
 
         if admin:
             if not ctx.author.has_permission(interactions.Permissions.ADMINISTRATOR):
@@ -167,30 +118,16 @@ class Inventory(interactions.Extension):
                 connection.close()
                 return
 
-        if country.startswith('<@') and country.endswith('>'):  # if a ping
-            # id = panstwo[2:-1]
-            result = connection.execute(text(
-                f'SELECT country_id FROM players WHERE player_id = {country[2:-1]};')).fetchone()
-            if result is None:
-                await ctx.send(embed=interactions.Embed(description=f'Gracz **{country}** nie ma państwa!'))
-                connection.close()
-                return
-            country = result[0]
-        else:
-            result = connection.execute(
-                text(f'SELECT country_id FROM countries WHERE LOWER(country_name) = LOWER("{country}");')).fetchone()
-            if result is None:
-                await ctx.send(embed=interactions.Embed(description=f'Państwo **{country}** nie istnieje!'))
-                connection.close()
-                return
-            country = result[0]
+        costs = {}
+        items = items.strip().split(',')  # ['2 Drewno', '-2 Talary']
 
-        items = items.lower().split(',')
-        print(items)
         # items = items.split(',')
-        for i in range(len(items)):
-            items[i] = items[i].strip()
-            items[i] = items[i].split(maxsplit=1)
+        for i, it in enumerate(items):
+            items[i] = items[i].strip().split()  # [['+2', 'Drewno'], ['-2', 'Talary']]
+            if str.isdigit(items[i][0]):
+                items[i][0] = '+' + items[i][0]
+            if not items[i][0] in ['+', '-', '=', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
+                return 0
             items[i] = [items[i][0].strip(), items[i][1].strip()]
             result = connection.execute(
                 text(f'SELECT item_id FROM items WHERE LOWER(item_name) = LOWER("{items[i][1]}");')).fetchone()
@@ -274,3 +211,32 @@ class Inventory(interactions.Extension):
         await ctx.send(f'Przekazano: {endmessage[0:-2:1]} państwu {country_name}.')
 
         connection.close()
+
+    @give.autocomplete('kraj')
+    async def item_autocomplete(self, ctx: interactions.AutocompleteContext):
+        connection = db.pax_engine.connect()
+        country_id = connection.execute(text(
+            f'SELECT country_id FROM players WHERE player_id = {ctx.author.id}'
+        )).fetchone()
+        connection.close()
+        if not country_id:
+            await ctx.send([interactions.SlashCommandChoice(name='Nie masz przypisanego państwa!',
+                                                            value='Nie masz przypisanego państwa!')])
+            return
+        countries = models.get_trade_range(country_id[0])['country_name'].tolist()
+
+        country = ctx.input_text
+        if country == '':
+            del countries[24:]
+            choices = [
+                interactions.SlashCommandChoice(name=c, value=c)
+                for c in countries
+            ]
+        else:
+            del countries[24:]
+            choices = [
+                interactions.SlashCommandChoice(name=c, value=c)
+                for c in countries if str.lower(country) in c
+            ]
+        await ctx.send(choices)
+        return

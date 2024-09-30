@@ -30,9 +30,56 @@ class Income:
         # Create an author element with country info for an embed
 
 
+def get_borders(provinces: list, borders: pd.DataFrame, border_types: list):
+    province_borders = borders.loc[(borders['province_id'].isin(provinces) | borders['province_id_2'].isin(provinces))
+                                   & borders['border_type'].isin(border_types)]
+    result = pd.concat([province_borders['province_id'], province_borders['province_id_2']]).drop_duplicates()
+
+    return sorted(result.tolist())
+
+
+def get_trade_range(country_id: int):
+    connection = db.pax_engine.connect()
+    print(country_id)
+    # Get country provinces
+    q = connection.execute(text(
+        f'SELECT province_id FROM provinces WHERE controller_id = {country_id}')).fetchall()
+    provinces = [x for xs in q for x in xs]
+    # Get all borders
+    q = connection.execute(text(
+        f'SELECT province_id, province_id_2, border_type FROM borders')).fetchall()
+    borders = pd.DataFrame(q, columns=['province_id', 'province_id_2', 'border_type'])
+
+    regular_border_provinces = get_borders(provinces, borders, border_types=[1, 3])
+
+    sea_provinces = get_borders(provinces, borders, border_types=[2])
+    sea_provinces = [pid for pid in sea_provinces if pid not in provinces]  # Leave only sea provinces
+    sea_provinces = get_borders(sea_provinces, borders, border_types=[1])
+    sea_provinces = get_borders(sea_provinces, borders, border_types=[1])  # Sea range is 3
+    sea_border_provinces = get_borders(sea_provinces, borders, border_types=[2])  # Change to land
+    sea_border_provinces = [pid for pid in sea_border_provinces if pid not in sea_provinces]  # Leave only
+
+    range_provinces = sorted(list(set(regular_border_provinces + sea_border_provinces)))
+
+    q = connection.execute(text(
+        f"""
+SELECT 
+  UNIQUE c.country_id, c.country_name 
+FROM 
+  countries c 
+  JOIN provinces p ON c.country_id = p.controller_id 
+WHERE 
+  p.province_id IN {tuple(range_provinces)} 
+  AND p.controller_id NOT IN (253, 254, 255);
+    """)).fetchall()
+    data = pd.DataFrame(q, columns=['country_id', 'country_name'])
+
+    return data
+
+
 async def country_author(self, country_id: int):
     connection = db.pax_engine.connect()
-    query = connection.execute(text(
+    q = connection.execute(text(
         f"""SELECT 
                   c.country_id,
                   c.country_name,
@@ -45,16 +92,17 @@ async def country_author(self, country_id: int):
                 WHERE 
                   c.country_id = {country_id};
               """)).all()
-    if not query:
+    if not q:
+        connection.close()
         return
     owners = ''
-    for row in query:
+    for row in q:
         member = await self.bot.fetch_member(user_id=row[2], guild_id=configure['GUILD'])
         user = member.user
         owners = f"{user.tag} {owners}"
 
-    country_id, country_name, player_id, country_image_url, country_bio_url = query[0]
-
+    country_id, country_name, player_id, country_image_url, country_bio_url = q[0]
+    connection.close()
     return interactions.EmbedAuthor(name=f'{country_name}, {owners}', icon_url=country_image_url, url=country_bio_url)
 
 
@@ -95,6 +143,7 @@ def get_province_modifiers(province_id):
              f"FROM provinces p NATURAL JOIN terrains t NATURAL JOIN terrains_modifiers tm "
              f"WHERE province_id = {province_id}")).fetchall()
     if not q:  # No terrain modifiers, this should not happen ever
+        connection.close()
         raise Exception('There are no terrain modifiers in your database. Add them, they can be blank.')
     terrain_modifiers = {}
     for tm in q:
@@ -120,6 +169,7 @@ def get_province_modifiers(province_id):
         workforce_modifier = workforce_modifier
         if workforce_modifier > 1:
             workforce_modifier = 1
+    connection.close()
     return total_workers, pops, workforce_modifier, terrain_modifiers, country_id, controller_id
 
 
@@ -172,6 +222,7 @@ ORDER BY
     # |           2 |        255 |           255 |          3 | 1.00 |       0 |           0.000000 |
     # |           3 |        255 |           255 |          3 | 1.00 |       0 |           0.000000 |
     if not q:  # This shouldn't happen ever. If it does, add provinces to the database.
+        connection.close()
         raise Exception('There are no provinces in your database.')
     provinces = q
 
@@ -196,6 +247,7 @@ FROM
     # |          1 |           3 |                   0 |              0 |               0 |
     if not q:  # This shouldn't happen ever.
         # If it does, cross join [terrains] and [buildings] and input it into the database.
+        connection.close()
         raise Exception('There are no terrain modifiers in your database.')
     tm = q
     terrain_modifiers = np.array(tm, dtype='O')
@@ -214,7 +266,9 @@ SELECT
 FROM 
   provinces p NATURAL 
   JOIN buildings b NATURAL 
-  JOIN structures s;
+  JOIN structures s
+WHERE 
+  s.quantity > 0
         """)).fetchall()
     # +-------------+-------------+----------+---------------+----------------------------------+------------------+
     # | province_id | building_id | quantity | building_name | building_emoji                   | building_workers |
@@ -277,6 +331,7 @@ FROM
         # 2. Get province buildings
         province_buildings = all_buildings.loc[all_buildings['province_id'] == province_id]
         if province_buildings is None:
+            connection.close()
             return Income(pops, dict())
 
         # 3. Get production and apply modifiers
@@ -431,6 +486,11 @@ def sum_building_incomes(incomes: dict):
             # print('\n')
 
             quantity, name, emoji, pops, workers, resource = incomes[province_id].buildings_incomes[income_key]
+            if quantity < 1:
+                continue
+            print(province_id)
+            print(income_key)
+            print(incomes[province_id].buildings_incomes[income_key])
             # print(f'{quantity}  {workers}  {pops}')
             # print(income)
             buildings[income_key]['pops'] = ((buildings[income_key]['quantity'] * buildings[income_key]['pops']) + (
@@ -758,7 +818,7 @@ async def build_army_list(country_id: int):
         province = f"#{row.iloc[8]}"
         movement = f"{row.iloc[9]}/{row.iloc[10]}"
         df2.loc[f'{i}'] = [army, unit, template, quantity, province, movement]
-
+    connection.close()
     return df2
 
 
@@ -798,7 +858,7 @@ async def build_army_list_admin():
         province = f"#{row.iloc[8]}"
         movement = f"{row.iloc[9]}/{row.iloc[10]}"
         df2.loc[f'{i}'] = [army, unit, template, quantity, province, movement]
-
+    connection.close()
     return df2
 
 
@@ -1092,7 +1152,7 @@ async def build_province_embed(self, province_id: int, country_id: int, all_prov
     pages = pagify(economy_lines, max_char=1000)
     for page in pages:
         fields.append(interactions.EmbedField(name=economy_field_title, value=page, inline=False))
-        economy_field_title = ''
+        economy_field_title = ' '
 
     # Get buildings info
     # print(f'building: {province_incomes[province_id]}')
@@ -1397,8 +1457,6 @@ fb = interactions.EmbedField(name=" ", value=" ", inline=False)
 def commands():
     f1 = interactions.EmbedField(name="Information",
                                  value=f"```ansi"
-                                       f"\n\u001b[0;31m/tutorial\u001b[0;0m"
-                                       f"\nPoradnik mechanik Pax Zeonica."
                                        f"\n\u001b[0;31m/commands\u001b[0;0m"
                                        f"\nWłaśnie tutaj jesteś!"
                                        f"\n\u001b[0;31m/info command\u001b[0;0m"
@@ -1411,8 +1469,6 @@ def commands():
                                  value=f"```ansi"
                                        f"\n\u001b[0;32m/inventory list\u001b[0;0m"
                                        f"\nLista itemów w twoim inventory."
-                                       f"\n\u001b[0;32m/inventory items\u001b[0;0m"
-                                       f"\nSzczegóły o typach itemów w twoim inventory."
                                        f"\n\u001b[0;32m/inventory give\u001b[0;0m"
                                        f"\nTransferowanie itemów między graczami.```", inline=True)
     f3 = interactions.EmbedField(name="Army",
@@ -1479,8 +1535,8 @@ def ic_commands():
 
 def ic_info_command():
     f1 = interactions.EmbedField(name="[nazwa_komendy]", value=f"```ansi"
-                                                         f"\n\u001b[0;31m•Nazwa Komendy\u001b[0;0m"
-                                                         f"\nWyświetla informacje danej komendy.```", inline=True)
+                                                               f"\n\u001b[0;31m•Nazwa Komendy\u001b[0;0m"
+                                                               f"\nWyświetla informacje danej komendy.```", inline=True)
     f2 = interactions.EmbedField(name="Przykłady:",
                                  value=f"```ansi\n\u001b[0;40m/info command [/info command]\u001b[0;0m```"
                                        f"Wyświetla stronę na której się właśnie znajdujesz.", inline=False)
@@ -1627,7 +1683,7 @@ def ic_inventory_give():
                                                       f"\nGracz do którego kraju chcemy dać itemy."
                                                       f"\n\u001b[0;31m•Nazwa Kraju\u001b[0;0m"
                                                       f"\nKraj do którego chcemy dać itemy.```", inline=True)
-    f2 = interactions.EmbedField(name="[argument]", value=f"```ansi"
+    f2 = interactions.EmbedField(name="[itemy]", value=f"```ansi"
                                                           f"\n\u001b[0;32m•Ilość & Item\u001b[0;0m"
                                                           f"\nRodzaj i ilość itemów które chcemy dać.```", inline=True)
     f3 = interactions.EmbedField(name="{admin}", value=f"```ansi"
@@ -1640,7 +1696,7 @@ def ic_inventory_give():
                                        f" 20 Kamień]\u001b[0;0m```"
                                        f"Daje państwu Karbadia 15 drewna i 20 kamienia.", inline=False)
     embed = interactions.Embed(
-        title="/inventory give [kraj] [argument] {admin}",
+        title="/inventory give [kraj] [itemy] {admin}",
         description="Daje innemu krajowi itemy z twojego inventory.\n"
                     "Uważaj z kim handlujesz - jeśli ktoś nie dotrzyma umowy, to twój problem IC!",
         author=author,
@@ -2334,7 +2390,7 @@ async def b_inventory_list(self, country_id):
             line += f' :small_orange_diamond: `{round(balance, 1)} (+{pos_quantity}/-{neg_quantity})`'
         else:
             line += (f' <:small_triangle_down:1260292467044122636> '
-                              f'`{round(balance, 1)} (+{pos_quantity}/-{neg_quantity})`')
+                     f'`{round(balance, 1)} (+{pos_quantity}/-{neg_quantity})`')
             if quantity < abs(balance):
                 line += f' :exclamation: __*{round(quantity / balance)}% popytu*__'
 
@@ -2397,7 +2453,7 @@ async def b_inventory_list(self, country_id):
     author = await country_author(self, country_id=country_id)
     footer = interactions.EmbedFooter(text=
                                       f"/inventory give [Karbadia] [20 Drewno, 300 Talary] | "
-                                      f"/inventory item [Drewno]")
+                                      f"/inventory list")
 
     embeds = []
     for page in pages:
